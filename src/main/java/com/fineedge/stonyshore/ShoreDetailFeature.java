@@ -30,6 +30,11 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
         int minX = chunk.getMinBlockX(), minZ = chunk.getMinBlockZ();
         int sea = world.getSeaLevel();
         List<Block> extras = optionalBlocks();
+        Block overgrown = optionalBlock("biomeswevegone:overgrown_stone");
+        Block verdant = firstAvailable("regions_unexplored:verdant_stone",
+            "biomeswevegone:verdant_stone", "hybrid_aquatic:verdant_stone",
+            "biomeswevegone:mossy_stone");
+        Block rocky = optionalBlock("biomeswevegone:rocky_stone");
         boolean any = false;
 
         // World-coordinate value noise makes adjacent chunks agree on the same broad bands.
@@ -40,9 +45,10 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
                 BlockPos surface = new BlockPos(x, top, z);
                 if (!world.getBiome(surface).is(Biomes.STONY_SHORE)) continue;
                 boolean cold = ShoreConfig.COLD.get() && isCold(world, surface);
-                boolean coast = top <= sea + 5 && nearOcean(world, surface);
+                boolean coast = top <= sea + 9 && nearOcean(world, surface);
                 double band = valueNoise(x, z, 42);
-                double damp = valueNoise(x + 913, z - 457, 28);
+                double damp = valueNoise(x + 913, z - 457, 26);
+                double cove = valueNoise(x - 1781, z + 654, 21);
                 // Include visible cliff faces, but never excavate a cliff or replace ores.
                 for (int y = top; y >= Math.max(sea - 10, top - 92); --y) {
                     BlockPos pos = new BlockPos(x, y, z);
@@ -50,7 +56,8 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
                     if (!isSourceStone(old)) continue;
                     if (y != top && !hasOpenSide(world, pos)) continue;
                     double grain = unit(hash(x * 11L, y * 23L, z * 11L));
-                    BlockState next = palette(old, y, sea, band, damp, grain, cold, coast, extras);
+                    BlockState next = palette(old, y, top, sea, band, damp, cove, grain,
+                        cold, coast, overgrown, verdant, rocky, extras);
                     if (next != old && !next.equals(old)) {
                         world.setBlock(pos, next, 2);
                         any = true;
@@ -67,12 +74,21 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
         }
 
         long choice = hash(minX >> 4, 0, minZ >> 4);
-        if (ShoreConfig.POOLS.get() && Math.floorMod(choice, 7L) == 0L)
-            any |= makePool(world, minX + 4 + (int) Math.floorMod(choice >>> 8, 8L),
-                minZ + 4 + (int) Math.floorMod(choice >>> 16, 8L), sea);
-        if (ShoreConfig.SPIRES.get() && Math.floorMod(choice, 11L) == 1L)
-            any |= makeSpire(world, minX + 5 + (int) Math.floorMod(choice >>> 24, 6L),
-                minZ + 5 + (int) Math.floorMod(choice >>> 32, 6L), sea, choice);
+        // Try several independent locations: one unlucky center should not suppress a whole chunk.
+        if (ShoreConfig.POOLS.get() && unit(choice) < ShoreConfig.POOL_CHANCE.get()) {
+            for (int i = 0; i < 8; i++) {
+                long sample = hash(minX, i + 31, minZ);
+                if (makePool(world, minX + 3 + (int) Math.floorMod(sample, 10L),
+                    minZ + 3 + (int) Math.floorMod(sample >>> 16, 10L), sea)) { any = true; break; }
+            }
+        }
+        if (ShoreConfig.SPIRES.get() && unit(hash(minX, 73, minZ)) < ShoreConfig.SPIRE_CHANCE.get()) {
+            for (int i = 0; i < 6; i++) {
+                long sample = hash(minX, i + 97, minZ);
+                if (makeSpire(world, minX + 3 + (int) Math.floorMod(sample, 10L),
+                    minZ + 3 + (int) Math.floorMod(sample >>> 16, 10L), sea, sample)) { any = true; break; }
+            }
+        }
         return any;
     }
 
@@ -93,25 +109,48 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
             || !world.getFluidState(pos.east()).isEmpty() || !world.getFluidState(pos.west()).isEmpty();
     }
 
-    private static BlockState palette(BlockState old, int y, int sea, double band,
-                                      double damp, double grain, boolean cold, boolean coast, List<Block> extras) {
+    private static BlockState palette(BlockState old, int y, int top, int sea, double band,
+                                      double damp, double cove, double grain, boolean cold, boolean coast,
+                                      Block overgrown, Block verdant, Block rocky, List<Block> extras) {
         if (old.is(Blocks.CALCITE) || old.is(Blocks.GRANITE)) {
             if (grain > 0.13) return old; // Keep naturally generated light and warm strata.
             return grain < 0.045 ? Blocks.COBBLESTONE.defaultBlockState() : Blocks.ANDESITE.defaultBlockState();
         }
         if (!old.is(Blocks.STONE) && grain > 0.28) return old;
-        if (grain > ShoreConfig.STONE_CHANCE.get()) return old;
+        if (grain > (damp > 0.56 && y == top ? Math.max(0.70, ShoreConfig.STONE_CHANCE.get())
+            : ShoreConfig.STONE_CHANCE.get())) return old;
         boolean tidal = y <= sea + 9;
-        if (coast && y >= sea && y <= sea + 3 && band > 0.78 && grain < 0.30)
-            return grain < 0.08 ? Blocks.GRAVEL.defaultBlockState() : Blocks.SAND.defaultBlockState();
+        // A coherent cove covers the upper surface, not the full vertical cliff face.
+        if (coast && y == top && y >= sea && cove > 0.52 && grain < 0.88)
+            return grain < 0.17 ? Blocks.GRAVEL.defaultBlockState() : Blocks.SAND.defaultBlockState();
         if (cold && tidal && damp > 0.74 && grain < 0.035) return Blocks.PACKED_ICE.defaultBlockState();
-        if (!cold && tidal && damp > 0.63 && grain < 0.075) return Blocks.MOSSY_COBBLESTONE.defaultBlockState();
-        if (!cold && tidal && damp > 0.80 && grain < 0.055) return Blocks.MOSS_BLOCK.defaultBlockState();
+        if (!cold && damp > 0.56 && y >= sea - 2 && (y == top || tidal)) {
+            if (y == top && grain < 0.14) return Blocks.MOSS_BLOCK.defaultBlockState();
+            if (overgrown != null && y == top && grain < 0.29) return overgrown.defaultBlockState();
+            if (verdant != null && grain < 0.40) return verdant.defaultBlockState();
+            if (grain < 0.53) return Blocks.MOSSY_COBBLESTONE.defaultBlockState();
+        }
+        if (rocky != null && band > 0.69 && grain < 0.12) return rocky.defaultBlockState();
         if (!extras.isEmpty() && grain > 0.33 && band > 0.63)
             return extras.get(Math.min(extras.size() - 1, (int) (grain * extras.size()))).defaultBlockState();
         if (band < 0.24) return grain < 0.16 ? Blocks.TUFF.defaultBlockState() : Blocks.ANDESITE.defaultBlockState();
         if (band > 0.76) return grain < 0.19 ? Blocks.COBBLESTONE.defaultBlockState() : Blocks.ANDESITE.defaultBlockState();
         return grain < 0.16 ? Blocks.COBBLESTONE.defaultBlockState() : Blocks.ANDESITE.defaultBlockState();
+    }
+
+    private static Block optionalBlock(String id) {
+        ResourceLocation key = ResourceLocation.tryParse(id);
+        if (key == null || !ForgeRegistries.BLOCKS.containsKey(key)) return null;
+        Block block = ForgeRegistries.BLOCKS.getValue(key);
+        return block == Blocks.AIR ? null : block;
+    }
+
+    private static Block firstAvailable(String... ids) {
+        for (String id : ids) {
+            Block block = optionalBlock(id);
+            if (block != null) return block;
+        }
+        return null;
     }
 
     private static List<Block> optionalBlocks() {
@@ -139,38 +178,42 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
     }
 
     private static boolean nearOcean(WorldGenLevel world, BlockPos pos) {
-        return world.getBiome(pos.offset(8, 0, 0)).is(BiomeTags.IS_OCEAN)
-            || world.getBiome(pos.offset(-8, 0, 0)).is(BiomeTags.IS_OCEAN)
-            || world.getBiome(pos.offset(0, 0, 8)).is(BiomeTags.IS_OCEAN)
-            || world.getBiome(pos.offset(0, 0, -8)).is(BiomeTags.IS_OCEAN);
+        for (int d : new int[]{4, 8, 12}) {
+            if (world.getBiome(pos.offset(d, 0, 0)).is(BiomeTags.IS_OCEAN)
+                || world.getBiome(pos.offset(-d, 0, 0)).is(BiomeTags.IS_OCEAN)
+                || world.getBiome(pos.offset(0, 0, d)).is(BiomeTags.IS_OCEAN)
+                || world.getBiome(pos.offset(0, 0, -d)).is(BiomeTags.IS_OCEAN)) return true;
+        }
+        return false;
     }
 
     private static boolean makePool(WorldGenLevel world, int cx, int cz, int sea) {
         int top = world.getHeight(Heightmap.Types.WORLD_SURFACE_WG, cx, cz) - 1;
-        if (top < sea + 2 || top > sea + 8) return false;
+        if (top < sea + 1 || top > sea + 24) return false;
         BlockPos center = new BlockPos(cx, top, cz);
         if (!world.getBiome(center).is(Biomes.STONY_SHORE)) return false;
-        // A one-block-deep basin, contained by existing rim rock; never open a drain into a cave.
-        for (int dx = -4; dx <= 4; dx++) for (int dz = -4; dz <= 4; dz++) {
+        // A two-block-radius basin inside an intact one-block rim, with a rock floor.
+        for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) {
             int d2 = dx * dx + dz * dz;
-            if (d2 > 16) continue;
+            if (d2 > 9) continue;
             int x = cx + dx, z = cz + dz;
             int h = world.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
             BlockPos p = new BlockPos(x, h, z);
             if (!world.getBiome(p).is(Biomes.STONY_SHORE) || h < top || h > top + 1
-                || !isRock(world.getBlockState(p)) || !isRock(world.getBlockState(new BlockPos(x, top - 2, z)))) return false;
+                || !isRock(world.getBlockState(p)) || !isRock(world.getBlockState(new BlockPos(x, top - 1, z)))
+                || world.getBlockState(p.above()).is(Blocks.POINTED_DRIPSTONE)) return false;
         }
-        for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) {
-            if (dx * dx + dz * dz > 9) continue;
+        for (int dx = -2; dx <= 2; dx++) for (int dz = -2; dz <= 2; dz++) {
+            if (dx * dx + dz * dz > 4) continue;
             int x = cx + dx, z = cz + dz;
             int h = world.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
-            for (int y = h; y >= top - 1; --y)
-                world.setBlock(new BlockPos(x, y, z), Blocks.WATER.defaultBlockState(), 2);
-            BlockPos aquatic = new BlockPos(x, top - 1, z);
+            if (h > top) world.setBlock(new BlockPos(x, h, z), Blocks.AIR.defaultBlockState(), 2);
+            world.setBlock(new BlockPos(x, top, z), Blocks.WATER.defaultBlockState(), 2);
+            BlockPos aquatic = new BlockPos(x, top, z);
             double r = unit(hash(x, top, z));
-            if (r < 0.06 && Blocks.SEA_PICKLE.defaultBlockState().canSurvive(world, aquatic))
+            if (r < 0.05 && Blocks.SEA_PICKLE.defaultBlockState().canSurvive(world, aquatic))
                 world.setBlock(aquatic, Blocks.SEA_PICKLE.defaultBlockState(), 2);
-            else if (r < 0.17 && Blocks.SEAGRASS.defaultBlockState().canSurvive(world, aquatic))
+            else if (r < 0.15 && Blocks.SEAGRASS.defaultBlockState().canSurvive(world, aquatic))
                 world.setBlock(aquatic, Blocks.SEAGRASS.defaultBlockState(), 2);
         }
         return true;
@@ -179,15 +222,25 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
     private static boolean makeSpire(WorldGenLevel world, int x, int z, int sea, long choice) {
         int y = world.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
         BlockPos base = new BlockPos(x, y, z);
-        if (y < sea + 1 || y > sea + 28 || !world.getBiome(base).is(Biomes.STONY_SHORE)
+        if (y < sea + 1 || y > sea + 96 || !world.getBiome(base).is(Biomes.STONY_SHORE)
             || !isRock(world.getBlockState(base))) return false;
-        int height = 3 + (int) Math.floorMod(choice >>> 42, 4L);
+        int height = 4 + (int) Math.floorMod(choice >>> 42, 4L);
         for (int i = 1; i <= height; i++)
             if (!world.getBlockState(base.above(i)).isAir()) return false;
         for (int i = 1; i <= height; i++) {
             BlockState stone = i == height ? Blocks.COBBLESTONE.defaultBlockState()
                 : (i % 3 == 0 ? Blocks.ANDESITE.defaultBlockState() : Blocks.TUFF.defaultBlockState());
             world.setBlock(base.above(i), stone, 2);
+        }
+        // Offset lower buttresses give the column a natural taper without spanning chunks.
+        for (int[] offset : new int[][]{{1,0},{-1,0},{0,1},{0,-1}}) {
+            BlockPos foot = base.offset(offset[0], 0, offset[1]);
+            if (isRock(world.getBlockState(foot)) && world.getBlockState(foot.above()).isAir()
+                && world.getBiome(foot).is(Biomes.STONY_SHORE)) {
+                int rise = 1 + (int) Math.floorMod(hash(x + offset[0], y, z + offset[1]), 3L);
+                for (int i = 1; i <= rise && world.getBlockState(foot.above(i)).isAir(); i++)
+                    world.setBlock(foot.above(i), Blocks.ANDESITE.defaultBlockState(), 2);
+            }
         }
         return true;
     }
