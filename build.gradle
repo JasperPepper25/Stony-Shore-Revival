@@ -1,0 +1,49 @@
+plugins {
+    id 'java'
+    id 'net.minecraftforge.gradle' version '7.0.39'
+    id 'net.minecraftforge.renamer' version '1.1.2'
+}
+
+version = mod_version
+group = 'com.fineedge.stonyshore'
+base.archivesName = 'stony-shore-revival'
+
+// The Java 25 Gradle process uses a Java 17 toolchain for Minecraft 1.20.1 bytecode.
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+    runs {
+        register('client') { workingDir.convention layout.projectDirectory.dir('run') }
+        register('server') {
+            workingDir.convention layout.projectDirectory.dir('run')
+            args '--nogui'
+        }
+    }
+}
+
+repositories {
+    minecraft.mavenizer(it)
+    maven fg.forgeMaven
+    maven fg.minecraftLibsMaven
+    mavenCentral()
+}
+dependencies {
+    implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")
+}
+
+// Forge 1.20.1 needs a remapped production JAR; the plain JAR is for development.
+renamer.mappings.from minecraft.dependency.toSrgFile
+renamer.classes(tasks.named('jar', Jar)) {
+    map.from minecraft.dependency.toSrgFile
+    archiveClassifier = 'srg'
+}
+tasks.named('build') { dependsOn tasks.named('renameJar') }
+
+tasks.named('processResources', ProcessResources) {
+    def props = [mod_version: mod_version]
+    inputs.properties props
+    filesMatching('META-INF/mods.toml') { expand props }
+}
+
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
