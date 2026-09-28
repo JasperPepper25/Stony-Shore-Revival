@@ -21,10 +21,10 @@ public final class ShoreConfig {
             .defineInRange("stone_replacement_chance", 0.42, 0.0, 1.0);
         POOLS = b.define("tide_pools", true);
         SPIRES = b.define("stone_spires", true);
-        POOL_CHANCE = b.comment("Chance to attempt a tide pool in each shore chunk; V2 testing default is high.")
-            .defineInRange("pool_chunk_chance", 0.50, 0.0, 1.0);
-        SPIRE_CHANCE = b.comment("Chance to attempt a stone spire in each shore chunk; V2 testing default is high.")
-            .defineInRange("spire_chunk_chance", 0.50, 0.0, 1.0);
+        POOL_CHANCE = b.comment("Chance to attempt tide pools in each shore chunk; successful chunks can get two.")
+            .defineInRange("pool_chunk_chance", 0.80, 0.0, 1.0);
+        SPIRE_CHANCE = b.comment("Chance to attempt a stone spire in each shore chunk.")
+            .defineInRange("spire_chunk_chance", 0.25, 0.0, 1.0);
         COLD = b.define("cold_shores", true);
         EXTRA_ROCKS = b.comment("Optional block IDs, e.g. modid:block. Missing IDs are ignored. Prefer full cube stone-like blocks.")
             .defineListAllowEmpty("extra_rocks", List::of, o -> o instanceof String s && s.matches("[a-z0-9_.-]+:[a-z0-9_./-]+"));
