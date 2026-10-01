@@ -1,14 +1,14 @@
-# Stony Shore Revival — V3 test build 0.3.0
+# Stony Shore Revival — V4 test build 0.4.0
 
 A Forge 1.20.1 source project for an additive stony-shore overhaul. The GitHub Actions workflow builds an installable remapped JAR and stores it as a workflow artifact. Do not put the source ZIP into `mods`.
 
 ## What this prototype does
 
 - Uses Forge's `add_features` biome modifier on `minecraft:stony_shore`. It does not replace the biome, noise settings, structure sets, surface rules, or neighboring terrain generation.
-- Retextures naturally exposed stone, calcite, granite, and andesite in coherent 42-block bands. Keeps most existing calcite and granite. Does not replace ores, plants, structures, or arbitrary modded blocks.
+- Retextures naturally exposed stone, calcite, granite, and andesite in coherent 42-block bands. Connected tuff ripples use an 11-block field on dry stone shelves. Keeps most existing calcite and granite. Does not replace ores, plants, structures, or arbitrary modded blocks.
 - Examines open cliff faces down to 92 blocks below the local top. The original cliff geometry stays in place.
-- Attempts tide pools in 80% of shore chunks at up to 20 sites, placing up to two pools per eligible chunk. Pools vary from radius one to three and depth one to two, with a contained rock rim and floor. They may receive sea pickles or seagrass. Shelves up to 64 blocks above sea level qualify. The modded rock blocks in the palette count as valid pool terrain.
-- Attempts a wide, tapered stone spire in 25% of shore chunks at up to six sites, including high shelves up to 96 blocks above sea level. Each broad base narrows to a slab tip, using rock, stairs, and slabs. They do not use dripstone.
+- Attempts tide pools in 80% of shore chunks at up to 28 sites, placing up to two per eligible chunk. Larger sites are tried first. Irregular, stretched basins have nominal radii two to six and depths one to three, with a contained rock rim and variable shallow margins. They may receive sea pickles or seagrass. Shelves up to 64 blocks above sea level qualify. Complete basin and rim checks keep excavations away from caves, features, and neighboring biomes. The entire pool stays within the origin chunk.
+- Attempts a local group of up to three varied, tapered stone spires in 25% of shore chunks, including high shelves up to 96 blocks above sea level. Three profiles range from six to thirteen blocks tall, with narrower bases, occasional leaning, rock cores, stairs, and slab tips. They do not use dripstone. The entire group stays within its origin chunk.
 - Adds continuous sand cove bands on *dry*, exposed low shore rather than dithering isolated sand blocks. The bands follow world-coordinate noise and nearby ocean biomes at 4, 8, and 12 blocks. Vertical cliffs that meet deep ocean have no ground for a dry beach; this version does not flatten cliffs or edit the neighboring ocean.
 - Adds broad wet patches of moss blocks and mossy cobblestone. If Biomes We've Gone is present, its `overgrown_stone`, `mossy_stone`, and `rocky_stone` are selected from its registry. A confirmed `verdant_stone` block from several optional namespaces takes precedence over its mossy stone; absent IDs are ignored.
 - Samples the shore and nearby biomes for cold temperatures, with scattered snow and packed ice accents.
@@ -37,7 +37,7 @@ cold_shores = true
 extra_rocks = []
 ```
 
-If this config was created by V2, the previous `0.50` values persist. Change them manually to get the V3 defaults above. These are attempt rates, not guaranteed placements; pools still need an intact rock floor and a suitable rim. Only use confirmed full-cube stone-like block IDs for `extra_rocks`. Changes affect future chunks. Biomes We've Gone's overgrown stone can naturally spread onto adjacent stone because the block has its own random tick behavior.
+If this config was created by V2, the previous `0.50` values persist. Change them manually to get the V4 defaults above. These are attempt rates, not guaranteed placements; pools still need an intact rock floor and a suitable rim. Only use confirmed full-cube stone-like block IDs for `extra_rocks`. Changes affect future chunks. Biomes We've Gone's overgrown stone can naturally spread onto adjacent stone because the block has its own random tick behavior.
 
 ## Current scope and next iteration
 
