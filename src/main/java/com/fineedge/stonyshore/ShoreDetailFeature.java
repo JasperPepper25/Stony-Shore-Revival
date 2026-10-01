@@ -52,6 +52,7 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
                 double band = valueNoise(x, z, 42);
                 double damp = valueNoise(x + 913, z - 457, 26);
                 double cove = valueNoise(x - 1781, z + 654, 48);
+                double tuff = valueNoise(x + 2764, z - 3852, 11);
                 // Include visible cliff faces, but never excavate a cliff or replace ores.
                 for (int y = top; y >= Math.max(sea - 10, top - 92); --y) {
                     BlockPos pos = new BlockPos(x, y, z);
@@ -59,7 +60,7 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
                     if (!isSourceStone(old)) continue;
                     if (y != top && !hasOpenSide(world, pos)) continue;
                     double grain = unit(hash(x * 11L, y * 23L, z * 11L));
-                    BlockState next = palette(old, y, top, sea, band, damp, cove, grain,
+                    BlockState next = palette(old, y, top, sea, band, damp, cove, tuff, grain,
                         cold, coast, overgrown, verdant, rocky, extras);
                     if (next != old && !next.equals(old)) {
                         world.setBlock(pos, next, 2);
@@ -77,25 +78,41 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
         }
 
         long choice = hash(minX >> 4, 0, minZ >> 4);
-        // Try several independent locations: one unlucky center should not suppress a whole chunk.
+        // Give larger basins the first attempts. The complete footprint stays within this chunk.
         if (ShoreConfig.POOLS.get() && unit(choice) < ShoreConfig.POOL_CHANCE.get()) {
             int placed = 0;
-            for (int i = 0; i < 20 && placed < 2; i++) {
+            for (int i = 0; i < 28 && placed < 2; i++) {
                 long sample = hash(minX, i + 31, minZ);
-                int radius = 1 + (int) Math.floorMod(sample >>> 36, 3L);
-                int depth = 1 + (int) Math.floorMod(sample >>> 42, 2L);
-                if (makePool(world, minX + 4 + (int) Math.floorMod(sample, 8L),
-                    minZ + 4 + (int) Math.floorMod(sample >>> 16, 8L), sea, radius, depth)) {
+                int radius = i < 12 ? 4 + i % 3 : 2 + i % 4;
+                int margin = radius + 1;
+                int span = 16 - 2 * margin;
+                int depth = 1 + (int) Math.floorMod(sample >>> 42, 3L);
+                if (makePool(world, minX + margin + (int) Math.floorMod(sample, span),
+                    minZ + margin + (int) Math.floorMod(sample >>> 16, span), sea, radius, depth, sample)) {
                     any = true;
                     placed++;
                 }
             }
         }
         if (ShoreConfig.SPIRES.get() && unit(hash(minX, 73, minZ)) < ShoreConfig.SPIRE_CHANCE.get()) {
-            for (int i = 0; i < 6; i++) {
+            int anchorX = -1, anchorZ = -1, placed = 0;
+            int[] placedX = new int[3], placedZ = new int[3];
+            for (int i = 0; i < 24 && placed < 3; i++) {
                 long sample = hash(minX, i + 97, minZ);
-                if (makeSpire(world, minX + 3 + (int) Math.floorMod(sample, 10L),
-                    minZ + 3 + (int) Math.floorMod(sample >>> 16, 10L), sea, sample)) { any = true; break; }
+                int x = minX + 4 + (int) Math.floorMod(sample, 8L);
+                int z = minZ + 4 + (int) Math.floorMod(sample >>> 16, 8L);
+                int anchorDistance = (x - anchorX) * (x - anchorX) + (z - anchorZ) * (z - anchorZ);
+                if (placed > 0 && (anchorDistance < 36 || anchorDistance > 100)) continue;
+                boolean overlaps = false;
+                for (int j = 0; j < placed; j++)
+                    if ((x - placedX[j]) * (x - placedX[j]) + (z - placedZ[j]) * (z - placedZ[j]) < 36)
+                        overlaps = true;
+                if (overlaps) continue;
+                if (makeSpire(world, x, z, sea, sample)) {
+                    if (placed == 0) { anchorX = x; anchorZ = z; }
+                    placedX[placed] = x; placedZ[placed++] = z;
+                    any = true;
+                }
             }
         }
         return any;
@@ -127,7 +144,7 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
     }
 
     private static BlockState palette(BlockState old, int y, int top, int sea, double band,
-                                      double damp, double cove, double grain, boolean cold, boolean coast,
+                                      double damp, double cove, double tuff, double grain, boolean cold, boolean coast,
                                       Block overgrown, Block verdant, Block rocky, List<Block> extras) {
         // Beach caps can replace natural calcite and granite too; the broad band is decided
         // before the ordinary rock palette and is never thinned by per-block dithering.
@@ -137,6 +154,10 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
             if (grain > 0.13) return old; // Keep naturally generated light and warm strata.
             return grain < 0.045 ? Blocks.COBBLESTONE.defaultBlockState() : Blocks.ANDESITE.defaultBlockState();
         }
+        // A smaller-scale field makes connected tuff ripples on exposed stone shelves.
+        // Leave wetter moss patches and the natural calcite/granite strata intact.
+        if (y == top && old.is(Blocks.STONE) && damp <= 0.56 && band < 0.44
+            && tuff > 0.56 && grain < 0.82) return Blocks.TUFF.defaultBlockState();
         if (!old.is(Blocks.STONE) && grain > 0.28) return old;
         if (grain > (damp > 0.56 && y == top ? Math.max(0.70, ShoreConfig.STONE_CHANCE.get())
             : ShoreConfig.STONE_CHANCE.get())) return old;
@@ -205,49 +226,72 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
         return false;
     }
 
-    private static boolean makePool(WorldGenLevel world, int cx, int cz, int sea, int radius, int depth) {
+    private static boolean makePool(WorldGenLevel world, int cx, int cz, int sea, int radius, int depth, long choice) {
         int waterline = world.getHeight(Heightmap.Types.WORLD_SURFACE_WG, cx, cz) - 1;
         if (waterline < sea || waterline > sea + 64) return false;
-        int floor = waterline - depth;
         BlockPos center = new BlockPos(cx, waterline, cz);
         if (!world.getBiome(center).is(Biomes.STONY_SHORE)) return false;
-
-        // Validate every basin and rim column before any edit. A low rim can be raised by at
-        // most two natural-looking rock blocks; an intact rock floor prevents cave drainage.
         int outer = radius + 1;
-        for (int dx = -outer; dx <= outer; dx++) for (int dz = -outer; dz <= outer; dz++) {
-            int d2 = dx * dx + dz * dz;
-            if (d2 > outer * outer) continue;
-            int x = cx + dx, z = cz + dz;
-            int h = world.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
-            BlockPos ground = new BlockPos(x, h, z);
-            if (!world.getBiome(ground).is(Biomes.STONY_SHORE)
-                || h < waterline - 2 || h > waterline + 2
-                || !isRock(world.getBlockState(ground))
-                || !world.getBlockState(ground.above()).isAir()
-                || !isRock(world.getBlockState(new BlockPos(x, floor - 1, z)))) return false;
-            if (d2 <= radius * radius) {
-                if (h < floor) return false;
-                for (int y = floor; y <= h; y++)
-                    if (!isRock(world.getBlockState(new BlockPos(x, y, z)))) return false;
-            } else {
-                for (int y = Math.min(h, waterline); y <= h; y++)
-                    if (!isRock(world.getBlockState(new BlockPos(x, y, z)))) return false;
+        int size = 2 * outer + 1;
+        boolean[][] basin = new boolean[size][size];
+        boolean[][] rim = new boolean[size][size];
+        double xStretch = 0.77 + 0.23 * unit(hash(choice, 1, 7));
+        double zStretch = 0.77 + 0.23 * unit(hash(choice, 2, 7));
+        int noiseX = (int) Math.floorMod(choice, 100000L);
+        int noiseZ = (int) Math.floorMod(choice >>> 24, 100000L);
+        int cells = 0;
+        for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
+            double distance = Math.hypot(dx / xStretch, dz / zStretch);
+            double wobble = (valueNoise(cx + dx + noiseX, cz + dz + noiseZ, 3) - 0.5) * 1.8;
+            if (distance <= radius - 0.15 + wobble) {
+                basin[dx + outer][dz + outer] = true;
+                cells++;
+            }
+        }
+        if (cells < 5 || !basin[outer][outer]) return false;
+        for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
+            if (!basin[dx + outer][dz + outer]) continue;
+            for (Direction dir : Direction.Plane.HORIZONTAL) {
+                int rx = dx + dir.getStepX() + outer, rz = dz + dir.getStepZ() + outer;
+                if (!basin[rx][rz]) rim[rx][rz] = true;
             }
         }
 
+        // First prove the entire basin and its enclosing lip have solid, natural rock.
+        // A two-block lip can bridge a small downhill step; reject caves, water, plants,
+        // and foreign features rather than cutting through them.
         for (int dx = -outer; dx <= outer; dx++) for (int dz = -outer; dz <= outer; dz++) {
-            int d2 = dx * dx + dz * dz;
-            if (d2 > outer * outer) continue;
+            boolean wet = basin[dx + outer][dz + outer];
+            if (!wet && !rim[dx + outer][dz + outer]) continue;
             int x = cx + dx, z = cz + dz;
             int h = world.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
-            if (d2 > radius * radius) {
+            BlockPos ground = new BlockPos(x, h, z);
+            int floor = wet ? poolFloor(waterline, depth, dx, dz, radius, true) : h;
+            if (!world.getBiome(ground).is(Biomes.STONY_SHORE)
+                || h < waterline - 2 || h > waterline + 4
+                || !isRock(world.getBlockState(ground))
+                || !world.getBlockState(ground.above()).isAir()
+                || h < floor
+                || !isRock(world.getBlockState(new BlockPos(x, floor - 1, z)))
+                || !isRock(world.getBlockState(new BlockPos(x, floor - 2, z)))) return false;
+            for (int y = floor; y <= h; y++)
+                if (!isRock(world.getBlockState(new BlockPos(x, y, z)))) return false;
+            if (!wet) for (int y = h + 1; y <= waterline; y++)
+                if (!world.getBlockState(new BlockPos(x, y, z)).isAir()) return false;
+        }
+        for (int dx = -outer; dx <= outer; dx++) for (int dz = -outer; dz <= outer; dz++) {
+            boolean wet = basin[dx + outer][dz + outer];
+            if (!wet && !rim[dx + outer][dz + outer]) continue;
+            int x = cx + dx, z = cz + dz;
+            int h = world.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
+            if (!wet) {
                 for (int y = h + 1; y <= waterline; y++)
                     world.setBlock(new BlockPos(x, y, z),
-                        (Math.floorMod(hash(x, y, z), 4L) == 0 ? Blocks.COBBLESTONE : Blocks.STONE)
+                        (Math.floorMod(hash(x, y, z), 5L) == 0 ? Blocks.COBBLESTONE : Blocks.STONE)
                             .defaultBlockState(), 2);
                 continue;
             }
+            int floor = poolFloor(waterline, depth, dx, dz, radius, true);
             for (int y = h; y > waterline; y--)
                 world.setBlock(new BlockPos(x, y, z), Blocks.AIR.defaultBlockState(), 2);
             for (int y = floor + 1; y <= waterline; y++)
@@ -262,56 +306,91 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
         return true;
     }
 
+    private static int poolFloor(int waterline, int depth, int dx, int dz, int radius, boolean wet) {
+        if (!wet) return waterline;
+        // Deeper center, shallow irregular margins, all beneath a level water surface.
+        int shelf = dx * dx + dz * dz > (radius - 1) * (radius - 1) && depth > 1 ? 1 : 0;
+        return waterline - depth + shelf;
+    }
+
     private static boolean makeSpire(WorldGenLevel world, int x, int z, int sea, long choice) {
         int y = world.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
         BlockPos base = new BlockPos(x, y, z);
         if (y < sea + 1 || y > sea + 96 || !world.getBiome(base).is(Biomes.STONY_SHORE)
             || !isRock(world.getBlockState(base))) return false;
-        int height = 5 + (int) Math.floorMod(choice >>> 42, 3L);
-        // A seven-block-wide rock base narrows each layer. Validate the whole footprint first;
-        // never erase foliage, structures, water, or a neighboring biome to make room.
-        for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) {
-            if (dx * dx + dz * dz > 9) continue;
+        int style = (int) Math.floorMod(choice >>> 36, 3L);
+        int height = style == 0 ? 9 + (int) Math.floorMod(choice >>> 42, 5L)
+            : style == 1 ? 7 + (int) Math.floorMod(choice >>> 42, 5L)
+            : 6 + (int) Math.floorMod(choice >>> 42, 4L);
+        double baseRadius = style == 1 ? 2.8 : style == 0 ? 2.15 : 2.45;
+        int leanX = (int) Math.floorMod(choice >>> 48, 3L) - 1;
+        int leanZ = (int) Math.floorMod(choice >>> 52, 3L) - 1;
+        // Validate all planned blocks before placing anything; confine the whole cluster
+        // to its origin chunk and keep existing terrain, plants, and structures intact.
+        for (int dx = -4; dx <= 4; dx++) for (int dz = -4; dz <= 4; dz++) {
+            boolean foundation = spireCell(dx, dz, 1, height, baseRadius, 0, 0, choice);
+            boolean body = false;
+            for (int layer = 2; layer <= height; layer++)
+                body |= spireCell(dx, dz, layer, height, baseRadius, leanX, leanZ, choice);
+            if (!foundation && !body) continue;
             int px = x + dx, pz = z + dz;
             int groundY = world.getHeight(Heightmap.Types.WORLD_SURFACE_WG, px, pz) - 1;
             BlockPos ground = new BlockPos(px, groundY, pz);
             if (groundY < y - 2 || groundY > y + 2 || !world.getBiome(ground).is(Biomes.STONY_SHORE)
                 || !isRock(world.getBlockState(ground))) return false;
-            for (int fillY = groundY + 1; fillY <= y; fillY++)
+            for (int fillY = groundY + 1; foundation && fillY <= y; fillY++)
                 if (!world.getBlockState(new BlockPos(px, fillY, pz)).isAir()) return false;
             for (int layer = 1; layer <= height; layer++) {
-                double radius = 3.0 - (layer - 1) * 2.6 / (height - 1);
-                if (dx * dx + dz * dz > radius * radius || y + layer <= groundY) continue;
+                if (!spireCell(dx, dz, layer, height, baseRadius, leanX, leanZ, choice)) continue;
+                if (y + layer <= groundY) return false;
                 if (!world.getBlockState(new BlockPos(px, y + layer, pz)).isAir()) return false;
             }
         }
-        for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) {
-            if (dx * dx + dz * dz > 9) continue;
+        for (int dx = -4; dx <= 4; dx++) for (int dz = -4; dz <= 4; dz++) {
+            boolean foundation = spireCell(dx, dz, 1, height, baseRadius, 0, 0, choice);
             int px = x + dx, pz = z + dz;
-            int groundY = world.getHeight(Heightmap.Types.WORLD_SURFACE_WG, px, pz) - 1;
-            for (int fillY = groundY + 1; fillY <= y; fillY++)
-                world.setBlock(new BlockPos(px, fillY, pz), Blocks.STONE.defaultBlockState(), 2);
+            if (foundation) {
+                int groundY = world.getHeight(Heightmap.Types.WORLD_SURFACE_WG, px, pz) - 1;
+                for (int fillY = groundY + 1; fillY <= y; fillY++)
+                    world.setBlock(new BlockPos(px, fillY, pz), Blocks.STONE.defaultBlockState(), 2);
+            }
             for (int layer = 1; layer <= height; layer++) {
-                double radius = 3.0 - (layer - 1) * 2.6 / (height - 1);
-                double distance = Math.sqrt(dx * dx + dz * dz);
-                if (distance > radius || y + layer <= groundY) continue;
+                if (!spireCell(dx, dz, layer, height, baseRadius, leanX, leanZ, choice)) continue;
                 BlockPos p = new BlockPos(px, y + layer, pz);
+                double radius = spireRadius(layer, height, baseRadius);
+                int offsetX = Math.round(leanX * (layer - 1f) / (height - 1));
+                int offsetZ = Math.round(leanZ * (layer - 1f) / (height - 1));
+                double distance = Math.hypot(dx - offsetX, dz - offsetZ);
                 BlockState block;
                 if (layer == height) block = Blocks.COBBLESTONE_SLAB.defaultBlockState();
-                else if (distance <= radius - 0.75) block = (layer % 3 == 0
+                else if (distance <= radius - 0.55 || layer == 1) block = (layer % 3 == 0
                     ? Blocks.ANDESITE : Blocks.STONE).defaultBlockState();
-                else if (Math.abs(dx) + Math.abs(dz) == 0 || Math.floorMod(hash(px, layer, pz), 3L) == 0)
+                else if (Math.floorMod(hash(px, layer, pz), 4L) == 0)
                     block = Blocks.ANDESITE_SLAB.defaultBlockState();
                 else {
-                    Direction facing = Math.abs(dx) >= Math.abs(dz)
-                        ? (dx > 0 ? Direction.WEST : Direction.EAST)
-                        : (dz > 0 ? Direction.NORTH : Direction.SOUTH);
+                    Direction facing = Math.abs(dx - offsetX) >= Math.abs(dz - offsetZ)
+                        ? (dx > offsetX ? Direction.WEST : Direction.EAST)
+                        : (dz > offsetZ ? Direction.NORTH : Direction.SOUTH);
                     block = Blocks.COBBLESTONE_STAIRS.defaultBlockState().setValue(StairBlock.FACING, facing);
                 }
                 world.setBlock(p, block, 2);
             }
         }
         return true;
+    }
+
+    private static double spireRadius(int layer, int height, double baseRadius) {
+        return baseRadius * Math.pow(1.0 - (layer - 1.0) / height, 0.8);
+    }
+
+    private static boolean spireCell(int dx, int dz, int layer, int height, double baseRadius,
+                                     int leanX, int leanZ, long choice) {
+        int offsetX = Math.round(leanX * (layer - 1f) / (height - 1));
+        int offsetZ = Math.round(leanZ * (layer - 1f) / (height - 1));
+        if (layer == height) return dx == offsetX && dz == offsetZ;
+        double angle = Math.atan2(dz - offsetZ, dx - offsetX);
+        double roughness = 0.17 * Math.sin(angle * 3 + unit(choice) * 6.28 + layer * 0.28);
+        return Math.hypot(dx - offsetX, dz - offsetZ) <= spireRadius(layer, height, baseRadius) + roughness;
     }
 
     private static double valueNoise(int x, int z, int scale) {
