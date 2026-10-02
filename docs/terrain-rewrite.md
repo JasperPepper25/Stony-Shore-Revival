@@ -1,7 +1,7 @@
 # Coastal terrain rewrite: first milestone
 
 Branch: `terrain-rewrite`. Preserved release: `baseline/v0.4.0` at `a705ce3`.
-Build: **0.5.0-audit.1**, a diagnostic foundation, not the new tide-pool release.
+Build: **0.5.0-audit.2**, a diagnostic foundation, not the new tide-pool release.
 
 ## What runs now
 
@@ -16,11 +16,14 @@ The export contains loaded mod versions, selected pack IDs, dimension generator
 and biome-source classes/codecs, resolved noise settings, density functions, stony-shore biome and feature definitions,
 terrain/biome JSON resource stacks and effective source-pack names, plus allowlisted
 worldgen JSON/TOML configs. `completion.json` reports omitted files and read errors;
-individual resolved encodings can also contain `encodingError` fields. Caps are
+individual resolved encodings can also contain `encodingError` fields. Runtime provider
+failures are recorded with their stage and stack trace in `completion.json` and the
+game log; unaffected sections continue. A partial report is still useful and should
+be attached. If no ZIP is produced, attach `logs/latest.log` after running the command. Caps are
 2 MiB per entry and 64 MiB of payload. Exporting is synchronous and may briefly
 pause the server; run once while standing still. The ZIP is never uploaded automatically.
 It does not deliberately collect a world seed, logs, player data, or server connection
-settings. Pack IDs and copied config values remain visible in the report.
+settings. Pack IDs, copied config values and exporter exception details remain visible in the report.
 
 ## Prototype and integration boundary
 
@@ -60,3 +63,14 @@ field. Preserve structures and avoid opening cave roofs as part of the integrati
 Automated tests currently cover deterministic traversal across positive/negative chunk
 coordinates, seed variation, bounded changes, mask fade, excluded elevations, continuity
 and invalid inputs. They do not certify in-game compatibility or water behavior.
+
+## Audit build 2 correction
+
+The first in-game audit attempt reported `ArrayIndexOutOfBoundsException` without
+a stack trace. The original command hid the cause behind a generic permission hint
+and deleted its unfinished ZIP. The exact originating provider remains unconfirmed.
+Build 2 queries concrete data directories instead of an empty resource root,
+retains unrelated evidence after runtime provider failures, reports partial status,
+and logs full failures. Four regression tests simulate an empty-root-sensitive
+provider, a failing directory, a failing section and a fatal archive write error.
+These tests validate recovery behavior, not reproduction in the user's full pack.

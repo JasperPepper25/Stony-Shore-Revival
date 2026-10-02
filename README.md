@@ -1,6 +1,6 @@
 # Terrain rewrite development branch
 
-**0.5.0-audit.1 is a diagnostic build.** It retains V4 generation while the new terrain integration is being designed. Run `/stonyshore audit` in your test world and attach the ZIP from the instance’s `stonyshore-audits` folder.
+**0.5.0-audit.2 is a diagnostic build.** It retains V4 generation while the new terrain integration is being designed. Run `/stonyshore audit` in your test world and attach the ZIP from the instance’s `stonyshore-audits` folder.
 
 See [rewrite plan and usage](docs/terrain-rewrite.md) and [provisional compatibility evidence](docs/compatibility-audit.md).
 
