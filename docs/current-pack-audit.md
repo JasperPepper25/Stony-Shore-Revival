@@ -1,4 +1,27 @@
-# Authoritative pack audit — October 2, 2026, 19:19 UTC
+# Current pack audit — October 2, 2026, 21:06 UTC
+
+The 21:06 UTC audit supersedes the 19:19 UTC baseline below. The coastal adapter
+reports installed, still wrapped, and no sampling failure; 5,784,338 planning cache
+misses and 76,316 eligible misses are activity counts, not unique columns or pools.
+The export completed without reported read/size errors. WWOO remains absent.
+
+Tectonic config has changed: `erosion_scale` is **0.25** (was 0.3) and
+`elevation_boost` is **0.15** (was 0.4). The encoded Overworld generator, Overworld
+noise settings, shared density-function entries and shore feature list are unchanged.
+Identical serialized graphs do not imply identical terrain when config-backed
+densities have changed. Keep the newest config as the testing baseline.
+
+Screenshots show filled pools, dry hollows, and a strong horizontal transition.
+The minimap reports camera coordinates, not basin-floor or seam elevations. This
+audit has no block sample or world seed, so it cannot prove why each hollow is dry
+or attribute the entire cliff line to either mod. Code inspection does establish
+that terrain.1 cuts shaping off at Y=77, rounds inferred height to integer blocks,
+and steps the boundary stencil every four blocks. Its aquifer is free to choose air
+even where the new cap carves below sea level. Terrain.2 addresses those mechanisms
+and adds loaded-block observations to the next audit.
+
+## Previous 19:19 UTC baseline
+
 
 The newer audit supersedes the 15:20 UTC report. William Wythers' Overhauled
 Overworld was intentionally removed. Do not design compatibility around its features.

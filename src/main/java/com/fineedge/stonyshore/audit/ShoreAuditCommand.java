@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.RegistryOps;
@@ -50,7 +51,7 @@ public final class ShoreAuditCommand {
             .then(Commands.literal("audit").executes(context -> {
                 context.getSource().sendSuccess(() -> Component.literal("Exporting loaded worldgen settings..."), false);
                 try {
-                    ExportResult result = export(context.getSource().getServer());
+                    ExportResult result = export(context.getSource().getServer(), context.getSource());
                     context.getSource().sendSuccess(() -> Component.literal("Shore audit saved: stonyshore-audits/"
                         + result.path().getFileName() + (result.warnings() == 0 ? "" : " (partial report; " + result.warnings() + " warnings)")
                         + ". Attach this ZIP for compatibility analysis."), false);
@@ -64,7 +65,7 @@ public final class ShoreAuditCommand {
             })));
     }
 
-    private static ExportResult export(MinecraftServer server) throws IOException {
+    private static ExportResult export(MinecraftServer server, CommandSourceStack source) throws IOException {
         Path directory = FMLPaths.GAMEDIR.get().resolve("stonyshore-audits");
         Files.createDirectories(directory);
         String stamp = DateTimeFormatter.ofPattern("uuuuMMdd-HHmmss").withZone(ZoneOffset.UTC).format(Instant.now());
@@ -73,9 +74,9 @@ public final class ShoreAuditCommand {
         int warnings;
         try (Archive archive = new Archive(output)) {
             JsonObject info = new JsonObject();
-            info.addProperty("format", 2);
+            info.addProperty("format", 3);
             info.addProperty("createdUtc", Instant.now().toString());
-            info.addProperty("scope", "Loaded registry encodings, selected packs, worldgen resource stacks, and allowlisted worldgen configs. No chunks, player data, world seed or existing logs are collected. Export failures include diagnostic stack traces. Runtime mixins may make additional changes not represented here.");
+            info.addProperty("scope", "Loaded registry encodings, selected packs, worldgen resource stacks, and allowlisted worldgen configs. Includes command-location X/Z and a sparse nearby loaded-block sample. No player inventories, world seed or existing logs are collected. Export failures include diagnostic stack traces. Runtime mixins may make additional changes not represented here.");
             info.add("selectedPacksInRepositoryOrder", GSON.toJsonTree(server.getPackRepository().getSelectedIds()));
             JsonObject mods = new JsonObject();
             ModList.get().getMods().forEach(mod -> mods.addProperty(mod.getModId(), mod.getVersion().toString()));
@@ -87,7 +88,7 @@ public final class ShoreAuditCommand {
                     var generator = level.getChunkSource().getGenerator();
                     JsonObject dimension = new JsonObject();
                     dimension.add("coastalTerrain", CoastalTerrainIntegration.status(level));
-                dimension.addProperty("generatorClass", generator.getClass().getName());
+                    dimension.addProperty("generatorClass", generator.getClass().getName());
                     dimension.addProperty("biomeSourceClass", generator.getBiomeSource().getClass().getName());
                     dimension.add("generator", archive.encode("dimension generator: " + level.dimension().location(), ChunkGenerator.CODEC, generator, ops));
                     archive.json("resolved/dimensions/" + resourcePath(level.dimension().location()), dimension);
@@ -154,6 +155,7 @@ public final class ShoreAuditCommand {
             archive.json("resource-index.json", index);
             archive.section("common configs", () -> configs(archive, FMLPaths.CONFIGDIR.get(), "configs/common/"));
             archive.section("world configs", () -> configs(archive, server.getWorldPath(LevelResource.ROOT).resolve("serverconfig"), "configs/world/"));
+            archive.section("nearby shore observations", () -> archive.json("observations/nearby-shore.json", ShoreObservations.capture(source)));
             archive.finishReport();
             warnings = archive.errors.size();
             complete = true;

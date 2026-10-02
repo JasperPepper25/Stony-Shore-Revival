@@ -54,6 +54,22 @@ class CoastalTerrainPlannerTest {
         }
         assertTrue(different > 100);
     }
+    @Test void sandShelvesAreOptionalSparseAndSpatiallyCoherent() {
+        var enabled = new CoastalTerrainPlanner(42);
+        var disabled = new CoastalTerrainPlanner(42, false);
+        int sand = 0, count = 0, neighbors = 0;
+        for (int x=-512; x<512; x+=2) for (int z=-512; z<512; z+=2) {
+            double strength = enabled.sample(x,z,66,63,1).sandStrength();
+            assertEquals(0,disabled.sample(x,z,66,63,1).sandStrength());
+            count++;
+            if (strength > 0.6) {
+                sand++;
+                if (enabled.sample(x+2,z,66,63,1).sandStrength() > 0.6) neighbors++;
+            }
+        }
+        assertTrue(sand > count*0.02 && sand < count*0.3);
+        assertTrue(neighbors > sand*0.85);
+    }
     @Test void invalidInputsFailClearly() {
         var planner = new CoastalTerrainPlanner(0);
         assertThrows(IllegalArgumentException.class, () -> planner.sample(0, 0, Double.NaN, 63, 1));

@@ -9,6 +9,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
 import net.minecraft.world.level.levelgen.*;
+import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.util.ObfuscationReflectionHelper;
@@ -16,11 +17,14 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.lang.reflect.Field;
+import java.util.Arrays;
 
 /** Minecraft 1.20.1 adapter, installed before Forge begins preparing the Overworld spawn. */
 public final class CoastalTerrainIntegration {
     private record State(String reason, CoastalColumnSampler columns, AtomicBoolean failed) {}
     private static final Map<ServerLevel, State> STATES = Collections.synchronizedMap(new WeakHashMap<>());
+    private static Field aquiferField;
     private CoastalTerrainIntegration() {}
 
     public static void onLevelLoad(LevelEvent.Load event) {
@@ -45,7 +49,7 @@ public final class CoastalTerrainIntegration {
         CoastalColumnSampler columns = new CoastalColumnSampler(level.getSeed(), 63,
             (x, y, z) -> original.finalDensity().compute(new DensityFunction.SinglePointContext(x, y, z)),
             (x, z) -> source.getNoiseBiome(QuartPos.fromBlock(x), QuartPos.fromBlock(65), QuartPos.fromBlock(z), sampler)
-                .is(Biomes.STONY_SHORE));
+                .is(Biomes.STONY_SHORE), ShoreConfig.SANDY_SHELVES.get());
         NoiseRouter replacement = new NoiseRouter(original.barrierNoise(), original.fluidLevelFloodednessNoise(),
             original.fluidLevelSpreadNoise(), original.lavaNoise(), original.temperature(), original.vegetation(),
             original.continents(), original.erosion(), original.depth(), original.ridges(),
@@ -77,6 +81,42 @@ public final class CoastalTerrainIntegration {
         // Keep legacy geometry suspended even after a runtime failure, avoiding mixed generators.
         return state != null && state.columns() != null;
     }
+    /** Called at NoiseChunk construction, before any block generation or fluid decisions. */
+    public static void attachAquifer(NoiseChunk chunk, RandomState random, Blender blender, Aquifer.FluidPicker fluids) {
+        if (blender != Blender.empty() || !(random.router().finalDensity() instanceof CoastalDensity coastal)
+            || coastal.failureFlag().get()) return;
+        try {
+            Field field = aquiferField();
+            Aquifer original = (Aquifer) field.get(chunk);
+            if (original instanceof CoastalAquifer) return;
+            field.set(chunk, new CoastalAquifer(original, fluids, coastal.columns(), coastal.failureFlag()));
+            coastal.columns().aquiferAttached();
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            if (coastal.failureFlag().compareAndSet(false, true))
+                LogUtils.getLogger().error("Coastal adapter disabled: could not attach shallow-water handling", ex);
+        }
+    }
+    private static synchronized Field aquiferField() {
+        if (aquiferField == null) {
+            // One typed field in the pinned 1.20.1 class. This avoids another obfuscated-name
+            // dependency; fail closed if a future layout is ambiguous. No global aquifer edit.
+            var fields = Arrays.stream(NoiseChunk.class.getDeclaredFields())
+                .filter(f -> f.getType() == Aquifer.class).toList();
+            if (fields.size() != 1) throw new IllegalStateException("Unexpected NoiseChunk aquifer layout");
+            aquiferField = fields.get(0);
+            aquiferField.setAccessible(true);
+        }
+        return aquiferField;
+    }
+    public static CoastalColumnSampler.Column column(ServerLevel level, int x, int z) {
+        State state = STATES.get(level);
+        if (state == null || state.columns() == null || state.failed().get()) return null;
+        try { return state.columns().column(x, z); }
+        catch (RuntimeException ex) {
+            if (state.failed().compareAndSet(false, true)) LogUtils.getLogger().error("Coastal column sampling failed", ex);
+            return null;
+        }
+    }
     public static JsonObject status(ServerLevel level) {
         State state = STATES.get(level);
         JsonObject result = new JsonObject();
@@ -88,6 +128,8 @@ public final class CoastalTerrainIntegration {
             if (state.columns() != null) {
                 result.addProperty("plannedColumnCacheMisses", state.columns().plannedColumns());
                 result.addProperty("eligibleColumnCacheMisses", state.columns().eligibleColumns());
+                result.addProperty("shallowWaterAquiferAttachments", state.columns().aquiferAttachments());
+                result.addProperty("shallowWaterDecisions", state.columns().waterDecisions());
             }
         }
         return result;

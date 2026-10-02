@@ -1,40 +1,42 @@
 package com.fineedge.stonyshore.terrain;
 
-/**
- * Pure terrain prototype, deliberately not connected to Minecraft generation yet.
- * Samples absolute coordinates; no chunk RNG, mutable state, or world writes.
- * A future integration must supply a smooth biome/coast mask and validate the
- * density-stage insertion against the pack's resolved terrain graph.
- */
+/** Seeded, continuous coastal relief in absolute coordinates; no chunk RNG or world writes. */
 public final class CoastalTerrainPlanner {
     private final long seed;
-    public CoastalTerrainPlanner(long seed) { this.seed = seed; }
+    private final boolean sandyShelves;
+    public CoastalTerrainPlanner(long seed) { this(seed, true); }
+    public CoastalTerrainPlanner(long seed, boolean sandyShelves) {
+        this.seed = seed; this.sandyShelves = sandyShelves;
+    }
 
-    public record Column(double targetSurface, double basinStrength, double influence) {}
+    public record Column(double targetSurface, double basinStrength, double influence, double sandStrength) {}
 
     /** Surface elevations use block coordinates, not heightmap first-air heights. */
     public Column sample(int x, int z, double originalSurface, int seaLevel, double shoreMask) {
         if (!Double.isFinite(originalSurface) || !Double.isFinite(shoreMask))
             throw new IllegalArgumentException("Surface and mask must be finite");
-        // Fade out before steep high coasts and deep water; this prototype is for low shelves.
+        // Reach zero BEFORE the sampler's high-coast exclusion, avoiding a clipped contour.
         double vertical = smooth(seaLevel - 5.0, seaLevel, originalSurface)
-            * (1 - smooth(seaLevel + 8.0, seaLevel + 18.0, originalSurface));
+            * (1 - smooth(seaLevel + 6.0, seaLevel + 17.0, originalSurface));
         double influence = clamp(shoreMask) * vertical;
-        if (influence == 0) return new Column(originalSurface, 0, 0);
+        if (influence == 0) return new Column(originalSurface, 0, 0, 0);
         double wx = x + 18 * (noise(x, z, 79, 11) - 0.5);
         double wz = z + 18 * (noise(x, z, 79, 29) - 0.5);
         double field = 0.8 * noise(wx, wz, 52, 47) + 0.2 * noise(wx, wz, 22, 71);
-        double basin = smooth(0.38, 0.72, field);
-        double shelf = seaLevel + 1.5 + 2.5 * noise(wx, wz, 65, 101);
-        double depth = 2.0 + 3.0 * noise(wx, wz, 35, 139);
+        double basin = smooth(0.34, 0.66, field);
+        double shelf = seaLevel + 1.0 + 1.5 * noise(wx, wz, 65, 101);
+        double depth = 3.0 + 3.0 * noise(wx, wz, 35, 139);
         double target = shelf - basin * depth;
-        // Hard bound for the first prototype. No unlimited continental cliff flattening.
+        // A separate broad field produces occasional sand shelves, not per-chunk patches.
+        double sand = sandyShelves ? smooth(0.64, 0.82, noise(wx, wz, 96, 211)) : 0;
+        target = lerp(target, seaLevel + 0.4 + 0.8 * noise(wx, wz, 70, 239), sand);
         double delta = Math.max(-8, Math.min(3, target - originalSurface));
-        return new Column(originalSurface + influence * delta, basin, influence);
+        return new Column(originalSurface + influence * delta, basin, influence, sand * influence);
     }
 
     private double noise(double x, double z, double scale, long salt) {
-        double sx = x / scale, sz = z / scale;
+        // Rotate the lattice; domain warping then breaks up the remaining straight contours.
+        double sx = (0.8 * x + 0.6 * z) / scale, sz = (-0.6 * x + 0.8 * z) / scale;
         long ix = (long) Math.floor(sx), iz = (long) Math.floor(sz);
         double fx = fade(sx - ix), fz = fade(sz - iz);
         return lerp(lerp(value(ix, iz, salt), value(ix + 1, iz, salt), fx),

@@ -1,12 +1,12 @@
 # Terrain rewrite development branch
 
-**0.5.0-terrain.1 is the first experimental noise-stage geometry test**, based on the October 2 post-WWOO audit. See [installation and test instructions](docs/terrain-test-1.md) and [current pack findings](docs/current-pack-audit.md). Use a fresh disposable test world.
+**0.5.0-terrain.2 tests shallow pool filling, smoother transitions, and occasional low sandy shelves**, based on the October 2 21:06 UTC audit and screenshot feedback. See [installation and test instructions](docs/terrain-test-2.md) and [current pack findings](docs/current-pack-audit.md). Use a fresh disposable test world; existing generated chunks are not repaired.
 
 The original [rewrite plan](docs/terrain-rewrite.md) documents the earlier diagnostic milestone; its audit-only behavior has been superseded by this test.
 
 ---
 
-# Stony Shore Revival — V4 test build 0.4.0
+# Historical V4 fallback — 0.4.0 behavior
 
 A Forge 1.20.1 source project for an additive stony-shore overhaul. The GitHub Actions workflow builds an installable remapped JAR and stores it as a workflow artifact. Do not put the source ZIP into `mods`.
 

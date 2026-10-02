@@ -1,6 +1,7 @@
 package com.fineedge.stonyshore.generation;
 
 import com.fineedge.stonyshore.ShoreConfig;
+import com.fineedge.stonyshore.terrain.CoastalTerrainIntegration;
 import static com.fineedge.stonyshore.generation.ShoreBlocks.*;
 import static com.fineedge.stonyshore.generation.ShoreMath.*;
 
@@ -28,17 +29,37 @@ public final class ShoreSurfacePass {
             "biomeswevegone:mossy_stone");
         Block rocky = optionalBlock("biomeswevegone:rocky_stone");
         boolean any = false;
+        boolean coastalTerrain = CoastalTerrainIntegration.installed(world.getLevel());
 
         // World-coordinate value noise makes adjacent chunks agree on the same broad bands.
         for (int x = minX; x < minX + 16; ++x) {
             for (int z = minZ; z < minZ + 16; ++z) {
-                int top = world.getHeight(Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
+                int top = world.getHeight(coastalTerrain ? Heightmap.Types.OCEAN_FLOOR_WG
+                    : Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
                 if (top < sea - 10) continue;
                 BlockPos surface = new BlockPos(x, top, z);
                 if (!world.getBiome(surface).is(Biomes.STONY_SHORE)) continue;
                 boolean cold = ShoreConfig.COLD.get() && isCold(world, surface);
-                boolean coast = top >= sea && top <= sea + 8
+                boolean coast = !coastalTerrain && top >= sea && top <= sea + 8
                     && world.getBlockState(surface.above()).isAir() && nearOcean(world, surface);
+                if (coastalTerrain && top >= sea - 1 && top <= sea + 3) {
+                    var column = CoastalTerrainIntegration.column(world.getLevel(), x, z);
+                    if (column != null && column.sandStrength() > 0.6) {
+                        BlockState above = world.getBlockState(surface.above());
+                        // Supported, two-block sand caps with a sandstone base. Never cover an
+                        // ore, vegetation, structure block or an unsupported cave roof with sand.
+                        if ((above.isAir() || above.is(Blocks.WATER))
+                            && isSourceStone(world.getBlockState(surface))
+                            && isSourceStone(world.getBlockState(surface.below()))
+                            && isSourceStone(world.getBlockState(surface.below(2)))
+                            && isSourceStone(world.getBlockState(surface.below(3)))) {
+                            world.setBlock(surface.below(2), Blocks.SANDSTONE.defaultBlockState(), 2);
+                            world.setBlock(surface.below(), Blocks.SAND.defaultBlockState(), 2);
+                            world.setBlock(surface, Blocks.SAND.defaultBlockState(), 2);
+                            any = true;
+                        }
+                    }
+                }
                 double band = valueNoise(x, z, 42);
                 double damp = valueNoise(x + 913, z - 457, 26);
                 double cove = valueNoise(x - 1781, z + 654, 48);

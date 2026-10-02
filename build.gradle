@@ -52,3 +52,6 @@ tasks.named('processResources', ProcessResources) {
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 
 tasks.named("test") { useJUnitPlatform() }
+
+// Constructor-only Mixin: no remapped member-name targets and no refmap required.
+tasks.named("jar", Jar) { manifest.attributes("MixinConfigs": "stonyshorerevival.mixins.json") }

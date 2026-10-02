@@ -15,6 +15,8 @@ public final class CoastalDensity implements DensityFunction {
     public CoastalDensity(DensityFunction input, CoastalColumnSampler columns, double scale, AtomicBoolean failed) {
         this.input = input; this.columns = columns; this.scale = scale; this.failed = failed;
     }
+    CoastalColumnSampler columns() { return columns; }
+    AtomicBoolean failureFlag() { return failed; }
     @Override public double compute(FunctionContext context) {
         double original = input.compute(context);
         // Leave old-version terrain blending to the existing generator.
