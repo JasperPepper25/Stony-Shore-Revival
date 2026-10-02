@@ -1,0 +1,74 @@
+# Authoritative pack audit — October 2, 2026, 19:19 UTC
+
+The newer audit supersedes the 15:20 UTC report. William Wythers' Overhauled
+Overworld was intentionally removed. Do not design compatibility around its features.
+Source ZIP SHA-256: `7b7b89c7d99e50e62edd8c424c02a1bcee3c9f367542764e47de97f105d4f331`.
+The export has 5,148 entries and no reported read, size or encoding failures.
+Raw user archives and full mod lists are not committed to this repository.
+
+## Confirmed active setup
+
+- Minecraft 1.20.1 / Forge 47.4.16; Tectonic 3.0.17; Terralith 2.5.4 (edited JAR).
+- Lithostitched 1.4.11; TerraBlender 3.0.1.10; Biolith 1.0.1-beta.1;
+  Biome Replacer 3.1-hippo; Streams Reflowing 2.13.8; Terrain Slabs 4.1.1-beta.
+- Overworld generator is `NoiseBasedChunkGenerator`; biome source is `MultiNoiseBiomeSource`.
+- Noise settings key is `minecraft:overworld`, supplied by `overlay.terratonic`.
+- Stony-shore biome JSON now comes from the edited Terralith JAR.
+- The encoded Overworld generator, noise settings, Tectonic config and every shared
+  resolved density-function entry are byte-identical to the previous audit.
+- WWOO's `beach_cliffs` and `stony_shore_tuff` features are absent. Several crop
+  features differ too; removal of WWOO is not assumed to be the cause of every difference.
+- Tectonic settings include sea level 63, world range -64..639, vertical scale 1.695,
+  elevation boost 0.4, and enabled aquifers. These are observed settings, not new defaults.
+
+## Terrain graph
+
+`tectonic:base_terrain` is the maximum of `tectonic:sloped_cheese` and
+`terralith:overworld/extra_terrain_sum`, supplied by the Terratonic overlay.
+The final density graph also includes Tectonic caves, noodle caves, underground
+rivers, lava tunnels and vertical/world blending. Altering only a raw continental
+height spline can miss Terralith's extra terrain contribution.
+
+Island and continental offset splines are distinct. The final offset applies
+vertical scaling to nonnegative continental offsets through the continental branch;
+the island branch follows its own path. That supports treating the user's island
+versus continent observation seriously, but it does not identify the source of the
+reference pools or prove a single cause for their appearance.
+
+The audit includes 28 empty `key` values in serialized Tectonic config constants.
+The original winning resource JSON retains keys such as `vertical_scale` and
+`elevation_boost`; the copied config supplies their values. Therefore the resolved
+JSON is diagnostic, not a lossless replacement datapack to copy into the mod.
+Lithostitched's runtime wrapper codec can also serialize its original graph while
+executing a wrapped graph. Runtime status must be reported separately.
+
+## Later passes to retain and test
+
+Streams Reflowing schedules carving at LAKES, water-bank work at LOCAL_MODIFICATIONS,
+vegetation at VEGETAL_DECORATION, and flow/snow handling at TOP_LAYER_MODIFICATION.
+Terrain Slabs schedules its feature at UNDERGROUND_STRUCTURES. These are registry
+observations, not proof that a feature modifies every shore chunk. The first prototype
+runs at noise evaluation, before these passes. No blanket removals of their features.
+
+## Adapter decision for terrain.1
+
+Use a per-Overworld runtime density adapter installed during Forge's level-load
+lifecycle, before spawn preparation. It retains the seeded loaded router and biome
+sampler, caps final density only in eligible low stony-shore columns, and applies the
+same cap to preliminary surface estimates. It does not replace the generator,
+biome layout, entire noise-settings registry, aquifer channels or ore channels.
+The ordinary structure beard is applied by NoiseChunk outside the wrapped final
+router density. This reduces interference; it does not guarantee structure safety.
+
+The adapter uses a single isolated, version-specific access to RandomState's router
+field (`f_224548_`) through Forge's remapped reflection helper. This is an experimental
+compatibility point, not a general-purpose supported API or compatibility guarantee.
+Lithostitched 1.4.11 does have density wrapping (verified in its 1.20.1 source at
+`bc8029471a7e4b2f00a2091d287d781397408a25`), but registry wrappers alone do not supply
+the live biome-source/sampler needed for exact biome restriction in this prototype.
+A global climate approximation would risk modifying other biomes in this pack.
+
+Sources inspected: Forge 1.20.1 MinecraftServer level-load event patch and Forge's
+ObfuscationReflectionHelper; Lithostitched 1.20.1 WrapDensityFunctionModifier,
+DensityFunctionWrapper and MergedDensityFunction. Full-pack runtime validation
+remains required, particularly with concurrent generation and Streams Reflowing.

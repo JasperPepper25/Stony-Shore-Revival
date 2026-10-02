@@ -1,6 +1,7 @@
 package com.fineedge.stonyshore.audit;
 
 import com.google.gson.*;
+import com.fineedge.stonyshore.terrain.CoastalTerrainIntegration;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 import com.mojang.serialization.Codec;
@@ -85,7 +86,8 @@ public final class ShoreAuditCommand {
                 for (var level : server.getAllLevels()) {
                     var generator = level.getChunkSource().getGenerator();
                     JsonObject dimension = new JsonObject();
-                    dimension.addProperty("generatorClass", generator.getClass().getName());
+                    dimension.add("coastalTerrain", CoastalTerrainIntegration.status(level));
+                dimension.addProperty("generatorClass", generator.getClass().getName());
                     dimension.addProperty("biomeSourceClass", generator.getBiomeSource().getClass().getName());
                     dimension.add("generator", archive.encode("dimension generator: " + level.dimension().location(), ChunkGenerator.CODEC, generator, ops));
                     archive.json("resolved/dimensions/" + resourcePath(level.dimension().location()), dimension);

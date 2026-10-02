@@ -1,8 +1,8 @@
 # Terrain rewrite development branch
 
-**0.5.0-audit.2 is a diagnostic build.** It retains V4 generation while the new terrain integration is being designed. Run `/stonyshore audit` in your test world and attach the ZIP from the instance’s `stonyshore-audits` folder.
+**0.5.0-terrain.1 is the first experimental noise-stage geometry test**, based on the October 2 post-WWOO audit. See [installation and test instructions](docs/terrain-test-1.md) and [current pack findings](docs/current-pack-audit.md). Use a fresh disposable test world.
 
-See [rewrite plan and usage](docs/terrain-rewrite.md) and [provisional compatibility evidence](docs/compatibility-audit.md).
+The original [rewrite plan](docs/terrain-rewrite.md) documents the earlier diagnostic milestone; its audit-only behavior has been superseded by this test.
 
 ---
 

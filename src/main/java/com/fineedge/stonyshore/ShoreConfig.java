@@ -6,6 +6,7 @@ import java.util.List;
 
 public final class ShoreConfig {
     public static final ForgeConfigSpec SPEC;
+    public static final ForgeConfigSpec.BooleanValue COASTAL_TERRAIN;
     public static final ForgeConfigSpec.BooleanValue POOLS;
     public static final ForgeConfigSpec.BooleanValue SPIRES;
     public static final ForgeConfigSpec.BooleanValue COLD;
@@ -19,6 +20,8 @@ public final class ShoreConfig {
         b.comment("Generation happens only in new chunks. These settings belong on the server.").push("generation");
         STONE_CHANCE = b.comment("Chance to texture a naturally exposed stone face; 0 keeps original stone.")
             .defineInRange("stone_replacement_chance", 0.42, 0.0, 1.0);
+        COASTAL_TERRAIN = b.comment("Experimental low-coast noise shaping for the audited Tectonic/Terralith pack. Restart required. Suspends legacy pools and spires when installed.")
+            .define("coastal_terrain", true);
         POOLS = b.define("tide_pools", true);
         SPIRES = b.define("stone_spires", true);
         POOL_CHANCE = b.comment("Chance to attempt pools in each shore chunk; larger irregular basins are tried first, up to two can succeed.")

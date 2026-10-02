@@ -1,3 +1,5 @@
+> Historical V3 evidence. Superseded by [the October 2 post-WWOO audit](current-pack-audit.md).
+
 # Provisional pack evidence
 
 The supplied October 1 log identifies Stony Shore Revival **0.3.0**, so this is
