@@ -35,7 +35,7 @@ final class ShoreObservations {
             row.add(level.getHeight(Heightmap.Types.WORLD_SURFACE,x,z)-1);
             row.add(level.getBiome(new BlockPos(x,sea+2,z)).unwrapKey().map(k->k.location().toString()).orElse("unregistered"));
             var column=CoastalTerrainIntegration.column(level,x,z);
-            if(column==null) row.add(JsonNull.INSTANCE); else row.add(column.surface());
+            if(column==null || !column.active()) row.add(JsonNull.INSTANCE); else row.add(column.surface());
             row.add(column!=null && column.active()); row.add(column==null ? 0 : column.sandStrength());
             JsonArray blocks=new JsonArray();
             for(int y=minY;y<=maxY;y++) {
