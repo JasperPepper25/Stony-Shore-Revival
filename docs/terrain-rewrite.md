@@ -13,8 +13,8 @@ Run it in the actual test world with the current pack, then attach the ZIP.
 Cheats must be available in singleplayer; a server operator can run it from console.
 
 The export contains loaded mod versions, selected pack IDs, dimension generator
-and biome-source classes/codecs, resolved noise settings and stony-shore biome,
-worldgen JSON resource stacks and effective source-pack names, plus allowlisted
+and biome-source classes/codecs, resolved noise settings, density functions, stony-shore biome and feature definitions,
+terrain/biome JSON resource stacks and effective source-pack names, plus allowlisted
 worldgen JSON/TOML configs. `completion.json` reports omitted files and read errors;
 individual resolved encodings can also contain `encodingError` fields. Caps are
 2 MiB per entry and 64 MiB of payload. Exporting is synchronous and may briefly

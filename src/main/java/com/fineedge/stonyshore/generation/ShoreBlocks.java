@@ -1,8 +1,6 @@
 package com.fineedge.stonyshore.generation;
 
 import com.fineedge.stonyshore.ShoreConfig;
-import static com.fineedge.stonyshore.generation.ShoreBlocks.*;
-import static com.fineedge.stonyshore.generation.ShoreMath.*;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;

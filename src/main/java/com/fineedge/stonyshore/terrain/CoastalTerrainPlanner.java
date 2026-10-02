@@ -23,10 +23,10 @@ public final class CoastalTerrainPlanner {
         if (influence == 0) return new Column(originalSurface, 0, 0);
         double wx = x + 18 * (noise(x, z, 79, 11) - 0.5);
         double wz = z + 18 * (noise(x, z, 79, 29) - 0.5);
-        double field = 0.7 * noise(wx, wz, 38, 47) + 0.3 * noise(wx, wz, 13, 71);
-        double basin = smooth(0.43, 0.67, field);
+        double field = 0.8 * noise(wx, wz, 52, 47) + 0.2 * noise(wx, wz, 22, 71);
+        double basin = smooth(0.38, 0.72, field);
         double shelf = seaLevel + 1.5 + 2.5 * noise(wx, wz, 65, 101);
-        double depth = 2.0 + 3.0 * noise(wx, wz, 27, 139);
+        double depth = 2.0 + 3.0 * noise(wx, wz, 35, 139);
         double target = shelf - basin * depth;
         // Hard bound for the first prototype. No unlimited continental cliff flattening.
         double delta = Math.max(-8, Math.min(3, target - originalSurface));

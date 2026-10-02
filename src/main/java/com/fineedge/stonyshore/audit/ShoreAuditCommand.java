@@ -14,6 +14,9 @@ import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.chunk.ChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+import net.minecraft.world.level.levelgen.DensityFunction;
+import net.minecraft.world.level.levelgen.placement.PlacedFeature;
+import net.minecraft.world.level.levelgen.feature.ConfiguredFeature;
 import net.minecraft.world.level.storage.LevelResource;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.fml.ModList;
@@ -83,9 +86,28 @@ public final class ShoreAuditCommand {
             for (var entry : settings.entrySet())
                 archive.json("resolved/noise_settings/" + resourcePath(entry.getKey().location()),
                     encode(NoiseGeneratorSettings.DIRECT_CODEC, entry.getValue(), ops));
+            var densities = server.registryAccess().registryOrThrow(Registries.DENSITY_FUNCTION);
+            for (var entry : densities.entrySet())
+                archive.json("resolved/density_functions/" + resourcePath(entry.getKey().location()),
+                    encode(DensityFunction.DIRECT_CODEC, entry.getValue(), ops));
             var biomes = server.registryAccess().registryOrThrow(Registries.BIOME);
             Biome shore = biomes.get(Biomes.STONY_SHORE);
-            if (shore != null) archive.json("resolved/stony_shore.json", encode(Biome.DIRECT_CODEC, shore, ops));
+            if (shore != null) {
+                archive.json("resolved/stony_shore.json", encode(Biome.DIRECT_CODEC, shore, ops));
+                JsonArray features = new JsonArray();
+                var stages = shore.getGenerationSettings().features();
+                for (int stage = 0; stage < stages.size(); stage++) {
+                    for (var holder : stages.get(stage)) {
+                        JsonObject feature = new JsonObject();
+                        feature.addProperty("stageIndex", stage);
+                        feature.addProperty("id", holder.unwrapKey().map(key -> key.location().toString()).orElse("inline"));
+                        feature.add("placed", encode(PlacedFeature.DIRECT_CODEC, holder.value(), ops));
+                        feature.add("configured", encode(ConfiguredFeature.DIRECT_CODEC, holder.value().feature().value(), ops));
+                        features.add(feature);
+                    }
+                }
+                archive.json("resolved/stony_shore_features.json", features);
+            }
 
             // Resource stack order is retained verbatim, with an explicit effective pack marker.
             JsonArray index = new JsonArray();
@@ -136,7 +158,10 @@ public final class ShoreAuditCommand {
 
     private static boolean worldgenResource(ResourceLocation id) {
         String path = id.getPath();
-        return path.endsWith(".json") && (path.startsWith("worldgen/") || path.startsWith("dimension/")
+        return path.endsWith(".json") && (path.startsWith("worldgen/density_function/")
+            || path.startsWith("worldgen/noise_settings/") || path.startsWith("worldgen/noise/")
+            || path.startsWith("worldgen/world_preset/") || path.startsWith("worldgen/biome/")
+            || path.startsWith("dimension/")
             || path.startsWith("dimension_type/") || path.startsWith("forge/biome_modifier/")
             || path.startsWith("forge/structure_modifier/") || path.startsWith("tags/worldgen/"));
     }
