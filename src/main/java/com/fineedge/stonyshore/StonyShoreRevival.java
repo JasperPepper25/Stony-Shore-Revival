@@ -1,5 +1,7 @@
 package com.fineedge.stonyshore;
 
+import com.fineedge.stonyshore.audit.ShoreAuditCommand;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -21,6 +23,7 @@ public final class StonyShoreRevival {
     public StonyShoreRevival() {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         FEATURES.register(bus);
+        MinecraftForge.EVENT_BUS.addListener(ShoreAuditCommand::register);
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, ShoreConfig.SPEC);
     }
 }

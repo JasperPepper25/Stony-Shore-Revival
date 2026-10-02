@@ -1,3 +1,11 @@
+# Terrain rewrite development branch
+
+**0.5.0-audit.1 is a diagnostic build.** It retains V4 generation while the new terrain integration is being designed. Run `/stonyshore audit` in your test world and attach the ZIP from the instance’s `stonyshore-audits` folder.
+
+See [rewrite plan and usage](docs/terrain-rewrite.md) and [provisional compatibility evidence](docs/compatibility-audit.md).
+
+---
+
 # Stony Shore Revival — V4 test build 0.4.0
 
 A Forge 1.20.1 source project for an additive stony-shore overhaul. The GitHub Actions workflow builds an installable remapped JAR and stores it as a workflow artifact. Do not put the source ZIP into `mods`.
