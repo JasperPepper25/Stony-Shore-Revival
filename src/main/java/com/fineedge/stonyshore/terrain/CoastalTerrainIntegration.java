@@ -4,6 +4,7 @@ import com.fineedge.stonyshore.ShoreConfig;
 import com.google.gson.JsonObject;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.QuartPos;
+import net.minecraft.tags.BiomeTags;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biomes;
@@ -49,7 +50,11 @@ public final class CoastalTerrainIntegration {
         CoastalColumnSampler columns = new CoastalColumnSampler(level.getSeed(), 63,
             (x, y, z) -> original.finalDensity().compute(new DensityFunction.SinglePointContext(x, y, z)),
             (x, z) -> source.getNoiseBiome(QuartPos.fromBlock(x), QuartPos.fromBlock(65), QuartPos.fromBlock(z), sampler)
-                .is(Biomes.STONY_SHORE), ShoreConfig.SANDY_SHELVES.get());
+                .is(Biomes.STONY_SHORE), ShoreConfig.SANDY_SHELVES.get(),
+            (x,z) -> source.getNoiseBiome(QuartPos.fromBlock(x),QuartPos.fromBlock(65),QuartPos.fromBlock(z),sampler)
+                .is(BiomeTags.IS_OCEAN), ShoreConfig.LANDFORMS.get(), ShoreConfig.ARCHES.get(), level.getMaxBuildHeight(),
+            (x,y,z) -> source.getNoiseBiome(QuartPos.fromBlock(x),QuartPos.fromBlock(y),QuartPos.fromBlock(z),sampler)
+                .is(Biomes.STONY_SHORE));
         NoiseRouter replacement = new NoiseRouter(original.barrierNoise(), original.fluidLevelFloodednessNoise(),
             original.fluidLevelSpreadNoise(), original.lavaNoise(), original.temperature(), original.vegetation(),
             original.continents(), original.erosion(), original.depth(), original.ridges(),
@@ -117,10 +122,30 @@ public final class CoastalTerrainIntegration {
             return null;
         }
     }
+    public static CoastalColumnSampler sampler(ServerLevel level) {
+        State state=STATES.get(level);
+        return state==null || state.failed().get() ? null : state.columns();
+    }
+    public static double sandCover(ServerLevel level,int x,int z,int floor) {
+        var sampler=sampler(level);if(sampler==null) return 0;
+        try { return sampler.sandCover(x,z,floor); }
+        catch(RuntimeException ex) { disable(level,ex);return 0; }
+    }
+    public static CoastalLandforms.Arch arch(ServerLevel level,int x,int z) {
+        var sampler=sampler(level);if(sampler==null) return null;
+        try { return sampler.arch(x,z); }
+        catch(RuntimeException ex) { disable(level,ex);return null; }
+    }
+    private static void disable(ServerLevel level,RuntimeException ex) {
+        State state=STATES.get(level);
+        if(state!=null && state.failed().compareAndSet(false,true)) LogUtils.getLogger().error("Coastal landform sampling disabled",ex);
+    }
     public static JsonObject status(ServerLevel level) {
         State state = STATES.get(level);
         JsonObject result = new JsonObject();
         result.addProperty("adapter", "minecraft-1.20.1-runtime-router");
+        result.addProperty("regionalLandforms", ShoreConfig.LANDFORMS.get());
+        result.addProperty("coastalArches", ShoreConfig.ARCHES.get());
         result.addProperty("status", state == null ? "not applicable / not initialized" : state.reason());
         if (state != null) {
             result.addProperty("samplingFailed", state.failed().get());
@@ -129,7 +154,7 @@ public final class CoastalTerrainIntegration {
                 result.addProperty("plannedColumnCacheMisses", state.columns().plannedColumns());
                 result.addProperty("eligibleColumnCacheMisses", state.columns().eligibleColumns());
                 result.addProperty("shallowWaterAquiferAttachments", state.columns().aquiferAttachments());
-                result.addProperty("shallowWaterDecisions", state.columns().waterDecisions());
+                result.addProperty("coastalWaterDecisions", state.columns().waterDecisions());
             }
         }
         return result;

@@ -8,6 +8,8 @@ public final class ShoreConfig {
     public static final ForgeConfigSpec SPEC;
     public static final ForgeConfigSpec.BooleanValue COASTAL_TERRAIN;
     public static final ForgeConfigSpec.BooleanValue SANDY_SHELVES;
+    public static final ForgeConfigSpec.BooleanValue LANDFORMS;
+    public static final ForgeConfigSpec.BooleanValue ARCHES;
     public static final ForgeConfigSpec.BooleanValue POOLS;
     public static final ForgeConfigSpec.BooleanValue SPIRES;
     public static final ForgeConfigSpec.BooleanValue COLD;
@@ -25,6 +27,10 @@ public final class ShoreConfig {
             .define("coastal_terrain", true);
         SANDY_SHELVES = b.comment("Occasional broad low sand shelves within coastal terrain shaping. Restart required.")
             .define("coastal_sandy_shelves", true);
+        LANDFORMS = b.comment("Experimental stepped upper shores, contained elevated pools, and cliff-foot beaches. Restart required.")
+            .define("coastal_landforms", true);
+        ARCHES = b.comment("Occasional carved arches in suitable shore headlands. Requires coastal_landforms; restart required.")
+            .define("coastal_arches", true);
         POOLS = b.define("tide_pools", true);
         SPIRES = b.define("stone_spires", true);
         POOL_CHANCE = b.comment("Chance to attempt pools in each shore chunk; larger irregular basins are tried first, up to two can succeed.")

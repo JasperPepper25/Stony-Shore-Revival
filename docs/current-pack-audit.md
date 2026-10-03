@@ -95,3 +95,19 @@ Sources inspected: Forge 1.20.1 MinecraftServer level-load event patch and Forge
 ObfuscationReflectionHelper; Lithostitched 1.20.1 WrapDensityFunctionModifier,
 DensityFunctionWrapper and MergedDensityFunction. Full-pack runtime validation
 remains required, particularly with concurrent generation and Streams Reflowing.
+
+
+## October 3 terrain.2 feedback and terrain.3 work
+
+The 03:45:59 UTC audit (SHA256 `6ffe0c0beedcfc19bd6783328f570c356d3183b08f506e803adc904f91ad3155`)
+is complete and reports the adapter installed, `samplingFailed=false`, and
+`routerStillWrapped=true`. WWOO remains absent. Tectonic elevation boost is 0.15
+and erosion scale is 0.25. Water attachment/decision counters are evaluations,
+not unique features. The local sample at -7315/-1527 contains 576 river, 469 ocean
+and 44 temperate-grove columns, zero stony-shore columns, and no unloaded skips.
+It therefore cannot establish filling rates at the photographed locations.
+
+User testing reports successful natural pools and smooth transitions. The new
+request is elevated terraced pools, cliff-attached arches, wider cliff-foot
+beaches, debris/vegetation, and sand extending underwater. See
+[terrain.3 design and validation limits](terrain-test-3.md).

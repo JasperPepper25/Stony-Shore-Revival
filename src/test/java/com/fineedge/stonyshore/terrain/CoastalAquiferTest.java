@@ -55,6 +55,17 @@ class CoastalAquiferTest {
         assertSame(air,dryPicker.computeSubstance(position,-1));
         assertEquals(0,columns.waterDecisions());
     }
+    @Test void elevatedBasinUsesItsOwnWaterPlane() {
+        var columns=new CoastalColumnSampler(42,63,(x,y,z)->(110.5-y)*.15,(x,z)->true,false,(x,z)->false,true,false,192);
+        DensityFunction.SinglePointContext p=null;
+        for(int x=0;x<192 && p==null;x+=4) for(int z=0;z<192;z+=4)
+            if(columns.waterCandidate(x,109,z)) {p=new DensityFunction.SinglePointContext(x,109,z);break;}
+        assertNotNull(p);
+        var aquifer=wrap(Blocks.AIR.defaultBlockState(),columns,new AtomicBoolean());
+        assertTrue(aquifer.computeSubstance(p,-1).is(Blocks.WATER));
+        assertTrue(aquifer.computeSubstance(new DensityFunction.SinglePointContext(p.blockX(),110,p.blockZ()),-1).isAir());
+        assertTrue(aquifer.computeSubstance(p,1).isAir());
+    }
     @Test void pinnedNoiseChunkHasOneAquiferFieldAndMatchingConstructorHook() throws Exception {
         assertEquals(1,Arrays.stream(NoiseChunk.class.getDeclaredFields()).filter(f->f.getType()==Aquifer.class).count());
         var mixin=Class.forName("com.fineedge.stonyshore.mixin.NoiseChunkMixin");

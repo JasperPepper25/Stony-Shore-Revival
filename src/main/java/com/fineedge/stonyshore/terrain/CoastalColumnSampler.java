@@ -8,11 +8,20 @@ import java.util.concurrent.atomic.LongAdder;
 public final class CoastalColumnSampler {
     @FunctionalInterface public interface Terrain { double density(int x, int y, int z); }
     @FunctionalInterface public interface Shore { boolean contains(int x, int z); }
-    public record Column(double surface, boolean active, double sandStrength) {}
+    @FunctionalInterface public interface SurfaceShore { boolean contains(int x,int y,int z); }
+    public record Column(double surface, boolean active, double sandStrength, int waterLevel, double original) {}
     private final Terrain terrain;
     private final Shore shore;
     private final CoastalTerrainPlanner planner;
     private final int sea;
+    private final boolean advanced;
+    private final int maxY;
+    private final Shore ocean;
+    private final SurfaceShore surfaceShore;
+    private final boolean sandyShelves;
+    private final CoastalLandforms landforms;
+    private final ThreadLocal<Map<Long, CoastalLandforms.Base>> bases = ThreadLocal.withInitial(() -> boundedMap(8192));
+    private final ThreadLocal<Map<Long, Boolean>> oceans = ThreadLocal.withInitial(() -> boundedMap(8192));
     private final ThreadLocal<Map<Long, Column>> columns = ThreadLocal.withInitial(() -> boundedMap(1024));
     private final ThreadLocal<Map<Long, Boolean>> biomes = ThreadLocal.withInitial(() -> boundedMap(2048));
     private final LongAdder planned = new LongAdder(), eligible = new LongAdder();
@@ -22,8 +31,19 @@ public final class CoastalColumnSampler {
         this(seed, sea, terrain, shore, true);
     }
     public CoastalColumnSampler(long seed, int sea, Terrain terrain, Shore shore, boolean sandyShelves) {
+        this(seed,sea,terrain,shore,sandyShelves,(x,z)->false,false,false,320);
+    }
+    public CoastalColumnSampler(long seed,int sea,Terrain terrain,Shore shore,boolean sandyShelves,
+                               Shore ocean,boolean advanced,boolean arches,int maxY) {
+        this(seed,sea,terrain,shore,sandyShelves,ocean,advanced,arches,maxY,(x,y,z)->shore.contains(x,z));
+    }
+    public CoastalColumnSampler(long seed,int sea,Terrain terrain,Shore shore,boolean sandyShelves,
+                               Shore ocean,boolean advanced,boolean arches,int maxY,SurfaceShore surfaceShore) {
+        this.surfaceShore=surfaceShore;
         this.terrain = terrain; this.shore = shore; this.sea = sea;
         this.planner = new CoastalTerrainPlanner(seed, sandyShelves);
+        this.sandyShelves=sandyShelves; this.ocean=ocean; this.advanced=advanced; this.maxY=maxY;
+        this.landforms=advanced ? new CoastalLandforms(seed,sea,this::base,this::density,this::isShore,arches) : null;
     }
     public int seaLevel() { return sea; }
     public long plannedColumns() { return planned.sum(); }
@@ -44,8 +64,9 @@ public final class CoastalColumnSampler {
     }
     private Column plan(int x, int z) {
         planned.increment();
-        Column unchanged = new Column(sea + 18, false, 0);
+        Column unchanged = new Column(sea + 18, false, 0, sea, sea + 18);
         if (!isShore(x, z)) return unchanged;
+        if (advanced) return regionalColumn(x,z);
         // The fade is already zero below this upper guard. Never flatten a high cliff.
         if (density(x, sea + 18, z) > 0 || density(x, sea, z) <= 0
             || density(x, sea - 4, z) <= 0 || density(x, sea - 5, z) <= 0
@@ -64,7 +85,7 @@ public final class CoastalColumnSampler {
         double target = Math.max(sea - 3.5, Math.min(surface, proposed.targetSurface()));
         boolean active = target < surface - 1e-6;
         if (active) eligible.increment();
-        return new Column(target, active, proposed.sandStrength());
+        return new Column(target, active, proposed.sandStrength(), sea, surface);
     }
     private double boundaryMask(int x, int z) {
         // Distance to the nearest non-shore quart CELL, evaluated at each block coordinate.
@@ -74,7 +95,7 @@ public final class CoastalColumnSampler {
         double distance = 12;
         for (int dx = -3; dx <= 3; dx++) for (int dz = -3; dz <= 3; dz++) {
             int bx = (qx + dx) * 4, bz = (qz + dz) * 4;
-            if (isShore(bx, bz)) continue;
+            if (isShore(bx, bz) || (advanced && isOcean(bx,bz))) continue;
             double nx = Math.max(0, Math.max(bx - x, x - (bx + 4)));
             double nz = Math.max(0, Math.max(bz - z, z - (bz + 4)));
             distance = Math.min(distance, Math.hypot(nx, nz));
@@ -90,22 +111,126 @@ public final class CoastalColumnSampler {
         int qx = Math.floorDiv(x, 4), qz = Math.floorDiv(z, 4);
         return biomes.get().computeIfAbsent(key(qx, qz), k -> shore.contains(qx * 4, qz * 4));
     }
+    private CoastalLandforms.Base base(int x,int z) {
+        return bases.get().computeIfAbsent(key(x,z), k -> planBase(x,z));
+    }
+    private CoastalLandforms.Base planBase(int x,int z) {
+        // Coarse vertical search followed by a fractional crossing. Bounds come from this
+        // world's build height; high stony shores are no longer rejected at one fixed Y.
+        int y=maxY-1;
+        while(y>sea-16 && density(x,y,z)<=0) y-=8;
+        if(y<=sea-16 && density(x,y,z)<=0) return new CoastalLandforms.Base(sea-16,sea-16,0,0);
+        int upper=Math.min(maxY-1,y+8);
+        double above=density(x,upper,z);
+        while(upper>y+1 && density(x,upper-1,z)<=0) { upper--; above=density(x,upper,z); }
+        int solidY=upper-1;double solid=density(x,solidY,z);
+        double original=solidY+solid/(solid-above)-0.5;
+        if(!Double.isFinite(original)) return new CoastalLandforms.Base(maxY-1,maxY-1,0,0);
+        if(!isShore(x,z) || !surfaceShore.contains(x,(int)Math.round(original),z))
+            return new CoastalLandforms.Base(original,original,0,0);
+        double mask=boundaryMask(x,z), d=oceanDistance(x,z);
+        double beach=sandyShelves ? beachField(x,z)*(1-smooth((d-12)/24)) : 0;
+        double target=original;
+        if(original>=sea && original<sea+18 && density(x,sea-4,z)>0
+            && density(x,sea-5,z)>0 && density(x,sea-6,z)>0) {
+            // Keep the successful low-coast relief, including its natural residual pillars.
+            target=planner.sample(x,z,original,sea,mask).targetSurface();
+        }
+        double upperBlend=smooth((original-(sea+9))/14);
+        if(upperBlend>0) {
+            double h=Math.max(0,original-sea);
+            double coastal=h*(0.08+0.92*smooth(d/96));
+            double warp=5*(planner.noise(x,z,180,601)-0.5);
+            double band=(coastal+warp)/16;
+            double tier=Math.floor(band);
+            double stepped=(tier+smooth((band-tier-0.52)/0.42))*16-warp;
+            double profile=sea+Math.max(1,0.12*coastal+0.88*stepped);
+            double proposed=original+mask*(Math.max(original-96,Math.min(original,profile))-original);
+            target+=upperBlend*(proposed-target);
+        }
+        if(beach>0 && original>=sea-2) {
+            // Retreat selected cliff feet to make an actual beach bench. Width follows the
+            // ocean distance and a broad seed field, rather than low altitude alone.
+            double pocket=smooth((planner.noise(x,z,19,617)-0.62)/0.18);
+            double bench=sea+0.6+Math.min(d,20)*0.055-3.0*pocket;
+            double desired=Math.max(original-96,Math.min(target,bench));
+            target+=beach*mask*(desired-target);
+        }
+        target=Math.min(original,Math.max(sea-3.5,target));
+        return new CoastalLandforms.Base(target,original,mask,beach);
+    }
+    public double beachField(int x,int z) {
+        return smooth((planner.noise(x,z,144,611)-0.48)/0.24);
+    }
+    private double oceanDistance(int x,int z) {
+        double distance=96;
+        int gx=Math.floorDiv(x,8)*8,gz=Math.floorDiv(z,8)*8;
+        for(int dx=-12;dx<=12;dx++) for(int dz=-12;dz<=12;dz++) {
+            int px=gx+dx*8,pz=gz+dz*8;
+            double d=Math.hypot(px-x,pz-z);
+            if(d<distance && isOcean(px,pz)) distance=d;
+        }
+        return distance;
+    }
+    private boolean isOcean(int x,int z) {
+        int qx=Math.floorDiv(x,4),qz=Math.floorDiv(z,4);
+        return oceans.get().computeIfAbsent(key(qx,qz),k->ocean.contains(qx*4,qz*4));
+    }
+    private Column regionalColumn(int x,int z) {
+        var base=base(x,z); double surface=base.surface(); int water=sea;
+        if(base.mask()>0) {
+            var arch=landforms.arch(x,z);
+            if(arch!=null) surface+=arch.reserve(x,z)*(base.original()-surface);
+            var pool=landforms.pool(x,z);
+            if(pool!=null) {
+                surface=landforms.poolFloor(pool,x,z,surface);
+                if(surface+0.5<pool.water()) water=pool.water();
+            }
+        }
+        boolean active=surface<base.original()-1e-6;
+        if(active) eligible.increment();
+        return new Column(surface,active,base.sand(),water,base.original());
+    }
+    public CoastalLandforms.Arch arch(int x,int z) {
+        return advanced && isShore(x,z) && base(x,z).mask()>0 ? landforms.arch(x,z) : null;
+    }
+    /** Material-only apron: adjacent ocean floor can receive sand, but its density is unchanged. */
+    public double sandCover(int x,int z,int floorY) {
+        if(!advanced || !sandyShelves || floorY<sea-11 || floorY>sea+5) return 0;
+        double strength=isShore(x,z) ? base(x,z).sand() : 0;
+        if(strength==0 && isOcean(x,z)) {
+            for(int dx=-12;dx<=12;dx+=4) for(int dz=-12;dz<=12;dz+=4) {
+                double d=Math.hypot(dx,dz);
+                if(d>12 || !isShore(x+dx,z+dz)) continue;
+                var b=base(x+dx,z+dz);
+                if(b.surface()>sea+5) continue;
+                strength=Math.max(strength,b.sand()*(1-smooth(d/16)));
+            }
+        }
+        return strength*(1-smooth((sea-2-floorY)/9.0));
+    }
     public double cap(double original, int x, int y, int z, double scale) {
-        if (y < sea - 3 || y >= sea + 24) return original;
-        Column column = column(x, z);
-        if (!column.active()) return original;
-        double cut = Math.min(original, (column.surface() + 0.5 - y) * scale);
-        // Return smoothly to the actual incoming density, even if its interpolated surface
-        // differs from the raw planning estimate. No abrupt density switch at Y=77.
-        double fade = 1 - smooth((y - (sea + 12)) / 12.0);
-        return original + fade * (cut - original);
+        if(y<sea-3 || y>= (advanced ? maxY : sea+24)) return original;
+        Column column=column(x,z); double result=original;
+        if(column.active()) {
+            double cut=Math.min(original,(column.surface()+0.5-y)*scale);
+            double start=advanced ? Math.max(sea+12,column.original()+2) : sea+12;
+            double fade=1-smooth((y-start)/12.0);
+            result=original+fade*(cut-original);
+        }
+        var arch=arch(x,z);
+        if(arch!=null) result=Math.min(result,arch.opening(x,y,z)*0.4);
+        return result;
     }
-    /** Only the shallow volume cut out of previously solid land belongs to our water pass. */
+    /** Each elevated basin has a single validated water plane, never one level per column. */
     public boolean waterCandidate(int x, int y, int z) {
-        if (y < sea - 3 || y >= sea) return false;
-        Column column = column(x, z);
-        return column.active() && y >= column.surface() + 0.5 && density(x, y, z) > 0;
+        if(y<sea-3 || y>= (advanced ? maxY : sea)) return false;
+        Column column=column(x,z);
+        if(column.active() && y<column.waterLevel() && y>=column.surface()+0.5 && density(x,y,z)>0) return true;
+        var arch=arch(x,z);
+        return y<sea && arch!=null && arch.opening(x,y,z)<0 && density(x,y,z)>0;
     }
+    public boolean elevatedWater(int x,int y,int z) { return y>=sea && waterCandidate(x,y,z); }
     private static double smooth(double v) {
         v = Math.max(0, Math.min(1, v));
         return v * v * v * (v * (v * 6 - 15) + 10);

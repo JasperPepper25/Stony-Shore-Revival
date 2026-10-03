@@ -19,12 +19,14 @@ final class ShoreObservations {
         }
         var level=source.getLevel();
         var origin=BlockPos.containing(source.getPosition());
-        int sea=level.getSeaLevel(), minY=sea-4, maxY=sea+24;
+        int sea=level.getSeaLevel();
+        int minY=origin.getY()>sea+24 ? Math.max(level.getMinBuildHeight(),origin.getY()-32) : sea-4;
+        int maxY=Math.min(level.getMaxBuildHeight()-1,origin.getY()>sea+24 ? origin.getY()+16 : sea+24);
         result.addProperty("dimension",level.dimension().location().toString());
-        result.addProperty("centerX",origin.getX()); result.addProperty("centerZ",origin.getZ());
+        result.addProperty("centerY",origin.getY()); result.addProperty("centerX",origin.getX()); result.addProperty("centerZ",origin.getZ());
         result.addProperty("seaLevel",sea); result.addProperty("minSampleY",minY); result.addProperty("maxSampleY",maxY);
         result.addProperty("spacingBlocks",2);
-        result.addProperty("rowFormat","[x,z,worldSurfaceTopY,biomeAtSeaPlus2,plannedSurfaceOrNull,active,sandStrength,blockPaletteIndicesFromMinToMaxY]");
+        result.addProperty("rowFormat","[x,z,worldSurfaceTopY,biomeAtSeaPlus2,plannedSurfaceOrNull,active,sandStrength,blockPaletteIndicesFromMinToMaxY,plannedWaterLevelOrNull,archCandidate]");
         result.addProperty("note","Current blocks, including later feature/player changes. Plan is a raw-density estimate, not measured terrain. Unloaded chunks are skipped. Camera height does not measure basin floor height.");
         Map<String,Integer> palette=new LinkedHashMap<>(); JsonArray rows=new JsonArray();
         int skipped=0;
@@ -42,7 +44,10 @@ final class ShoreObservations {
                 String state=chunk.getBlockState(new BlockPos(x,y,z)).toString();
                 blocks.add(palette.computeIfAbsent(state,k->palette.size()));
             }
-            row.add(blocks);rows.add(row);
+            row.add(blocks);
+            if(column==null)row.add(JsonNull.INSTANCE);else row.add(column.waterLevel());
+            row.add(CoastalTerrainIntegration.arch(level,x,z)!=null);
+            rows.add(row);
         }
         JsonArray states=new JsonArray();palette.keySet().forEach(states::add);
         result.add("blockPalette",states);result.add("columns",rows);result.addProperty("skippedUnloadedColumns",skipped);

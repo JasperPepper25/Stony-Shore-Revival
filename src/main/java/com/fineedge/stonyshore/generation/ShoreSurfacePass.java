@@ -6,6 +6,7 @@ import static com.fineedge.stonyshore.generation.ShoreBlocks.*;
 import static com.fineedge.stonyshore.generation.ShoreMath.*;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.tags.BiomeTags;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.block.Block;
@@ -19,7 +20,10 @@ import java.util.List;
 
 public final class ShoreSurfacePass {
     private ShoreSurfacePass() {}
-    public static boolean apply(WorldGenLevel world, ChunkPos chunk) {
+    public static boolean apply(WorldGenLevel world, ChunkPos chunk) { return apply(world,chunk,false); }
+    public static boolean apply(WorldGenLevel world, ChunkPos chunk, boolean apronOnly) {
+        boolean regional=ShoreConfig.LANDFORMS.get() && CoastalTerrainIntegration.installed(world.getLevel());
+        if(apronOnly && !regional) return false;
         int minX = chunk.getMinBlockX(), minZ = chunk.getMinBlockZ();
         int sea = world.getSeaLevel();
         List<Block> extras = optionalBlocks();
@@ -36,13 +40,17 @@ public final class ShoreSurfacePass {
             for (int z = minZ; z < minZ + 16; ++z) {
                 int top = world.getHeight(coastalTerrain ? Heightmap.Types.OCEAN_FLOOR_WG
                     : Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
-                if (top < sea - 10) continue;
+                if (top < sea - 11) continue;
                 BlockPos surface = new BlockPos(x, top, z);
-                if (!world.getBiome(surface).is(Biomes.STONY_SHORE)) continue;
+                boolean stony=world.getBiome(surface).is(Biomes.STONY_SHORE);
+                boolean ocean=world.getBiome(surface).is(BiomeTags.IS_OCEAN);
+                if(apronOnly ? !ocean : !stony) continue;
+                if(regional) any |= sandCap(world,surface,CoastalTerrainIntegration.sandCover(world.getLevel(),x,z,top));
+                if(apronOnly) continue;
                 boolean cold = ShoreConfig.COLD.get() && isCold(world, surface);
                 boolean coast = !coastalTerrain && top >= sea && top <= sea + 8
                     && world.getBlockState(surface.above()).isAir() && nearOcean(world, surface);
-                if (coastalTerrain && top >= sea - 1 && top <= sea + 3) {
+                if (!regional && coastalTerrain && top >= sea - 1 && top <= sea + 3) {
                     var column = CoastalTerrainIntegration.column(world.getLevel(), x, z);
                     if (column != null && column.sandStrength() > 0.6) {
                         BlockState above = world.getBlockState(surface.above());
@@ -89,6 +97,32 @@ public final class ShoreSurfacePass {
         }
 
         return any;
+    }
+
+    private static boolean sandCap(WorldGenLevel world,BlockPos surface,double coverage) {
+        int sea=world.getSeaLevel();
+        if(coverage<=0) return false;
+        BlockState above=world.getBlockState(surface.above());
+        if(!above.isAir() && above.getFluidState().isEmpty()) return false;
+        double upper=Math.max(0,Math.min(1,(surface.getY()-(sea+2))/4.0));
+        coverage*=1-upper*upper*(3-2*upper);
+        // Fine-grained thinning is confined to margins/deeper water; strong interiors stay solid.
+        double grain=unit(hash(surface.getX()+world.getSeed(),surface.getY(),surface.getZ()));
+        if(grain>=coverage) return false;
+        if(!isSandSubstrate(world.getBlockState(surface))
+            || !isSandSubstrate(world.getBlockState(surface.below()))
+            || !isSandSubstrate(world.getBlockState(surface.below(2)))) return false;
+        // Replace supported material only. The sea-floor may be covered by aquatic plants.
+        if(!world.getBlockState(surface.below(3)).isFaceSturdy(world,surface.below(3),net.minecraft.core.Direction.UP)) return false;
+        world.setBlock(surface.below(2),Blocks.SANDSTONE.defaultBlockState(),2);
+        world.setBlock(surface.below(),Blocks.SAND.defaultBlockState(),2);
+        world.setBlock(surface,Blocks.SAND.defaultBlockState(),2);
+        return true;
+    }
+    private static boolean isSandSubstrate(BlockState state) {
+        return isSourceStone(state) || state.is(Blocks.SAND) || state.is(Blocks.SANDSTONE)
+            || state.is(Blocks.GRAVEL) || state.is(Blocks.COBBLESTONE) || state.is(Blocks.MOSSY_COBBLESTONE)
+            || state.is(Blocks.TUFF);
     }
 
     private static BlockState palette(BlockState old, int y, int top, int sea, double band,

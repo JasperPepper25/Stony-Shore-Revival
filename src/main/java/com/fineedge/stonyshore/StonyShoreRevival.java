@@ -21,6 +21,9 @@ public final class StonyShoreRevival {
     public static final RegistryObject<Feature<NoneFeatureConfiguration>> SHORE_DETAIL = FEATURES.register(
         "shore_detail", () -> new ShoreDetailFeature(NoneFeatureConfiguration.CODEC));
 
+    public static final RegistryObject<Feature<NoneFeatureConfiguration>> SHORE_APRON = FEATURES.register(
+        "shore_apron", () -> new ShoreApronFeature(NoneFeatureConfiguration.CODEC));
+
     public StonyShoreRevival() {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         FEATURES.register(bus);

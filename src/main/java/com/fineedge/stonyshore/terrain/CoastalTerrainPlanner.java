@@ -34,7 +34,7 @@ public final class CoastalTerrainPlanner {
         return new Column(originalSurface + influence * delta, basin, influence, sand * influence);
     }
 
-    private double noise(double x, double z, double scale, long salt) {
+    double noise(double x, double z, double scale, long salt) {
         // Rotate the lattice; domain warping then breaks up the remaining straight contours.
         double sx = (0.8 * x + 0.6 * z) / scale, sz = (-0.6 * x + 0.8 * z) / scale;
         long ix = (long) Math.floor(sx), iz = (long) Math.floor(sz);
@@ -42,7 +42,7 @@ public final class CoastalTerrainPlanner {
         return lerp(lerp(value(ix, iz, salt), value(ix + 1, iz, salt), fx),
             lerp(value(ix, iz + 1, salt), value(ix + 1, iz + 1, salt), fx), fz);
     }
-    private double value(long x, long z, long salt) {
+    double value(long x, long z, long salt) {
         long h = seed ^ x * 0x632BE59BD9B4E019L ^ z * 0xC6BC279692B5CC83L ^ salt * 0x9E3779B97F4A7C15L;
         h = (h ^ (h >>> 30)) * 0xBF58476D1CE4E5B9L;
         h = (h ^ (h >>> 27)) * 0x94D049BB133111EBL;

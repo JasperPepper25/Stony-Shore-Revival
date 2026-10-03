@@ -1,6 +1,6 @@
 # Terrain rewrite development branch
 
-**0.5.0-terrain.2 tests shallow pool filling, smoother transitions, and occasional low sandy shelves**, based on the October 2 21:06 UTC audit and screenshot feedback. See [installation and test instructions](docs/terrain-test-2.md) and [current pack findings](docs/current-pack-audit.md). Use a fresh disposable test world; existing generated chunks are not repaired.
+**0.5.0-terrain.3 adds stepped upper shores, elevated pools, headland arches and broader beaches with submerged sand.** See [installation and test instructions](docs/terrain-test-3.md) and [current pack findings](docs/current-pack-audit.md). Use a fresh disposable test world; existing generated chunks are not repaired.
 
 The original [rewrite plan](docs/terrain-rewrite.md) documents the earlier diagnostic milestone; its audit-only behavior has been superseded by this test.
 

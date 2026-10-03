@@ -7,7 +7,7 @@ import net.minecraft.world.level.levelgen.Aquifer;
 import net.minecraft.world.level.levelgen.DensityFunction;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** Retains the pack's aquifer except in our newly carved, shallow sea-level volume. */
+/** Retains the pack's aquifer except in our newly carved sea-level and validated elevated basin volumes. */
 public final class CoastalAquifer implements Aquifer {
     private final Aquifer delegate;
     private final FluidPicker fluids;
@@ -22,11 +22,11 @@ public final class CoastalAquifer implements Aquifer {
         sourceWater = false;
         BlockState original = delegate.computeSubstance(context, density);
         // Positive final density includes structure beards. Existing fluids (including lava)
-        // are never replaced, and the global picker must permit ordinary water at this height.
+        // are never replaced, and the global picker must permit ordinary water at the coastal datum.
         if (failed.get() || density > 0 || (original != null && !original.isAir())) return original;
         try {
             int x = context.blockX(), y = context.blockY(), z = context.blockZ();
-            if (columns.waterCandidate(x, y, z) && fluids.computeFluid(x, y, z).at(y).is(Blocks.WATER)) {
+            if (columns.waterCandidate(x, y, z) && fluids.computeFluid(x, y, z).at(Math.min(y,columns.seaLevel()-1)).is(Blocks.WATER)) {
                 sourceWater = true;
                 columns.waterSelected();
                 return Blocks.WATER.defaultBlockState();
