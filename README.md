@@ -1,4 +1,12 @@
-# Stony Shore Revival — V4 test build 0.4.0
+# Terrain rewrite development branch
+
+**0.5.0-terrain.3 adds stepped upper shores, elevated pools, headland arches and broader beaches with submerged sand.** See [installation and test instructions](docs/terrain-test-3.md) and [current pack findings](docs/current-pack-audit.md). Use a fresh disposable test world; existing generated chunks are not repaired.
+
+The original [rewrite plan](docs/terrain-rewrite.md) documents the earlier diagnostic milestone; its audit-only behavior has been superseded by this test.
+
+---
+
+# Historical V4 fallback — 0.4.0 behavior
 
 A Forge 1.20.1 source project for an additive stony-shore overhaul. The GitHub Actions workflow builds an installable remapped JAR and stores it as a workflow artifact. Do not put the source ZIP into `mods`.
 

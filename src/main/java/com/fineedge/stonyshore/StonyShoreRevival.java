@@ -1,5 +1,8 @@
 package com.fineedge.stonyshore;
 
+import com.fineedge.stonyshore.audit.ShoreAuditCommand;
+import com.fineedge.stonyshore.terrain.CoastalTerrainIntegration;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraft.world.level.levelgen.feature.Feature;
 import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConfiguration;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -18,9 +21,14 @@ public final class StonyShoreRevival {
     public static final RegistryObject<Feature<NoneFeatureConfiguration>> SHORE_DETAIL = FEATURES.register(
         "shore_detail", () -> new ShoreDetailFeature(NoneFeatureConfiguration.CODEC));
 
+    public static final RegistryObject<Feature<NoneFeatureConfiguration>> SHORE_APRON = FEATURES.register(
+        "shore_apron", () -> new ShoreApronFeature(NoneFeatureConfiguration.CODEC));
+
     public StonyShoreRevival() {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         FEATURES.register(bus);
+        MinecraftForge.EVENT_BUS.addListener(ShoreAuditCommand::register);
+        MinecraftForge.EVENT_BUS.addListener(net.minecraftforge.eventbus.api.EventPriority.LOWEST, CoastalTerrainIntegration::onLevelLoad);
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, ShoreConfig.SPEC);
     }
 }
