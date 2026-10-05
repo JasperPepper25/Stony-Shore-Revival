@@ -86,6 +86,7 @@ public final class CoastalLandforms {
         int centerX=cx*64+32,centerZ=cz*64+32;
         if(arches && noise.value(cx,cz,800)<0.7) {
             for(int attempt=0;attempt<12;attempt++) {
+                // A portal and its piers must fit entirely within the planning cell.
                 int x=centerX+(int)(noise.value(cx,cz,801+attempt)*16)-8;
                 int z=centerZ+(int)(noise.value(cx,cz,831+attempt)*16)-8;
                 if(!shore.contains(x,z) || ground.sample(x,z).original()<sea+22)continue;
@@ -105,41 +106,43 @@ public final class CoastalLandforms {
             int z=centerZ+(int)(noise.value(cx,cz,1002+salt)*28)-14;
             if(!shore.contains(x,z) || ground.sample(x,z).surface()<sea+12)continue;
             count("shelfCandidates");
-            double rx=7+7*noise.value(cx,cz,1003+salt),rz=7+7*noise.value(cx,cz,1004+salt);
+            // Smaller sites can fit broken cliff shelves; broad sites remain possible.
+            double rx=6+8*noise.value(cx,cz,1003+salt),rz=6+8*noise.value(cx,cz,1004+salt);
             double angle=noise.value(cx,cz,1005+salt)*Math.PI;
             Pool shape=new Pool(x,z,rx,rz,angle,0,3,1007+salt);
             double low=Double.POSITIVE_INFINITY,highOriginal=Double.NEGATIVE_INFINITY;
             boolean valid=true;
             int extent=17;
             for(int px=x-extent;px<=x+extent && valid;px++)for(int pz=z-extent;pz<=z+extent;pz++) {
-                if(shape.radius(px,pz,noise)>0.95)continue;
+                if(shape.radius(px,pz,noise)>0.92)continue;
                 Base b=ground.sample(px,pz);
-                if(!shore.contains(px,pz) || b.mask()<0.45) {valid=false;break;}
+                if(!shore.contains(px,pz) || b.mask()<0.3) {valid=false;break;}
                 low=Math.min(low,b.surface());highOriginal=Math.max(highOriginal,b.original());
             }
-            int water=(int)Math.floor(low-2-4*noise.value(cx,cz,1006+salt));
-            if(!valid || water<sea+7 || highOriginal-water>88) {count("shelvesRejectedTerrain");continue;}
+            if(!valid) {count("shelvesRejectedTerrain");continue;}
+            int water=(int)Math.floor(low-1.5-2.5*noise.value(cx,cz,1006+salt));
+            if(water<sea+5 || highOriginal-water>88) {count("shelvesRejectedTerrain");continue;}
             int depth=2+(int)(3*noise.value(cx,cz,1008+salt));
             Pool pool=new Pool(x,z,rx*0.49,rz*0.49,angle,water,depth,1007+salt);
             for(int px=x-extent;px<=x+extent && valid;px++)for(int pz=z-extent;pz<=z+extent;pz++) {
-                if(pool.radius(px,pz,noise)>1.45)continue;
-                for(int y=water-depth-4;y<=water+2;y++)if(terrain.density(px,y,pz)<=0) {valid=false;break;}
+                if(pool.radius(px,pz,noise)>1.2)continue;
+                for(int y=water-depth-4;y<=water+1;y++)if(terrain.density(px,y,pz)<=0) {valid=false;break;}
             }
             if(!valid) {count("poolsRejectedSupport");continue;}
             count("shelvesAccepted");count("poolsAccepted");
             return new Site(new Shelf(shape,water+1.5,pool),null,null);
         }
         // A one-sided recess is an overhang, separate from the two-portal arch test.
-        if(noise.value(cx,cz,1200)<0.55)for(int attempt=0;attempt<8;attempt++) {
+        if(noise.value(cx,cz,1200)<0.8)for(int attempt=0;attempt<10;attempt++) {
             int x=centerX+(int)(noise.value(cx,cz,1201+attempt)*16)-8;
             int z=centerZ+(int)(noise.value(cx,cz,1221+attempt)*16)-8;
-            Base b=ground.sample(x,z);if(!shore.contains(x,z) || b.mask()<0.8 || b.original()<sea+24)continue;
+            Base b=ground.sample(x,z);if(!shore.contains(x,z) || b.mask()<0.6 || b.original()<sea+20)continue;
             for(int direction=0;direction<8;direction++) {
                 double angle=direction*Math.PI/4,sn=Math.sin(angle),cs=Math.cos(angle);
                 int px=(int)Math.round(x-sn*16),pz=(int)Math.round(z+cs*16);
                 double outside=ground.sample(px,pz).original();
                 int floor=(int)Math.max(sea+2,Math.min(b.surface()-3,outside+1));
-                if(outside>floor+2 || b.original()<floor+18)continue;
+                if(outside>floor+2 || b.original()<floor+16)continue;
                 boolean solid=true;
                 for(int u=-5;u<=5;u+=5)for(int v=-6;v<=6;v+=6)
                     if(terrain.density((int)(x+u*cs-v*sn),floor+15,(int)(z+u*sn+v*cs))<=0)solid=false;
@@ -156,19 +159,19 @@ public final class CoastalLandforms {
         for(int sign:new int[]{-1,1}) {
             int px=(int)Math.round(a.x()-sign*s*(a.length()+2));
             int pz=(int)Math.round(a.z()+sign*c*(a.length()+2));
-            if(ground.sample(px,pz).surface()>sea+4) {count("archesRejectedPortals");return false;}
+            if(ground.sample(px,pz).surface()>sea+a.height()*0.43-1) {count("archesRejectedPortals");return false;}
             // Thick original piers on either side, with a solid base and roof connection.
             px=(int)Math.round(a.x()+sign*c*(a.width()+4));
             pz=(int)Math.round(a.z()+sign*s*(a.width()+4));
-            if(!shore.contains(px,pz) || ground.sample(px,pz).original()<sea+a.height()+3) return false;
-            for(int y=sea-2;y<=sea+a.height()+2;y+=2) if(terrain.density(px,y,pz)<=0) return false;
+            if(!shore.contains(px,pz) || ground.sample(px,pz).original()<sea+a.height()+3) {count("archesRejectedPiers");return false;}
+            for(int y=sea-2;y<=sea+a.height()+2;y+=2) if(terrain.density(px,y,pz)<=0) {count("archesRejectedPiers");return false;}
         }
         for(int along=-1;along<=1;along++) {
             int px=(int)Math.round(a.x()-s*a.length()*along*0.3);
             int pz=(int)Math.round(a.z()+c*a.length()*along*0.3);
             if(!shore.contains(px,pz) || ground.sample(px,pz).mask()<0.7
                 || ground.sample(px,pz).original()<sea+a.height()+5
-                || terrain.density(px,(int)Math.ceil(sea+a.height()+3),pz)<=0) return false;
+                || terrain.density(px,(int)Math.ceil(sea+a.height()+3),pz)<=0) {count("archesRejectedRoof");return false;}
         }
         return true;
     }

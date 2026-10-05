@@ -112,9 +112,11 @@ public final class ShoreSurfacePass {
         if(!above.isAir() && above.getFluidState().isEmpty() && !BeachMaterials.generatedStoneSlab(above)) return false;
         double upper=Math.max(0,Math.min(1,(surface.getY()-(sea+2))/4.0));
         coverage*=1-upper*upper*(3-2*upper);
-        // Fine-grained thinning is confined to margins/deeper water; strong interiors stay solid.
-        double grain=unit(hash(surface.getX()+world.getSeed(),surface.getY(),surface.getZ()));
-        if(grain>=coverage) return false;
+        // A continuous field keeps the beach edge irregular without producing
+        // independent, one-block teeth at the waterline or across chunk borders.
+        int shift=(int)(world.getSeed() ^ (world.getSeed() >>> 32));
+        double edge=valueNoise(surface.getX()+shift,surface.getZ()-shift,7);
+        if(coverage<0.82 && edge>=coverage) return false;
         if(!isSandSubstrate(world.getBlockState(surface))
             || !isSandSubstrate(world.getBlockState(surface.below()))
             || !isSandSubstrate(world.getBlockState(surface.below(2)))) return false;

@@ -1,5 +1,6 @@
 package com.fineedge.stonyshore.terrain;
 import org.junit.jupiter.api.Test;
+import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 class RegionalCoastTest {
     private static CoastalColumnSampler coast(long seed) {
@@ -39,6 +40,16 @@ class RegionalCoastTest {
             var p=c.column(x,0);assertTrue(p.active());assertTrue(p.surface()<145);
             assertTrue(c.cap(0.05,x,150,0,.15)<0);
         }
+    }
+    @Test void highWorldSurfaceSearchUsesBroadProbesAndNonShoreCapDoesNotPlan() {
+        AtomicInteger samples=new AtomicInteger();
+        var c=new CoastalColumnSampler(42,63,(x,y,z)->{
+            samples.incrementAndGet();return (110.5-y)*.15;
+        },(x,z)->x>=0,true,(x,z)->x<0,true,false,640,(x,y,z)->false);
+        assertEquals(0.25,c.cap(0.25,-8,100,0,.15));
+        assertEquals(0,c.plannedColumns());
+        c.column(0,0);
+        assertTrue(samples.get()<500,"Surface probes should not scan every block from the world ceiling");
     }
     @Test void resultsDoNotDependOnTraversalAndSandFadesUnderwater() {
         var a=coast(42);var b=coast(42);

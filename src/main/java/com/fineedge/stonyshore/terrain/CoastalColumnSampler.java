@@ -120,13 +120,8 @@ public final class CoastalColumnSampler {
         if(!isShore(x,z) || !surfaceShore.contains(x,(int)Math.round(original),z))
             return new CoastalLandforms.Base(original,original,0,0);
         double mask=Math.min(boundaryMask(x,z),surfaceMask(x,z,(int)Math.round(original))), d=oceanDistance(x,z);
-        double beach=sandyShelves ? beachField(x,z)*(1-smooth((d-12)/24)) : 0;
+        double beach=sandyShelves ? beachField(x,z)*(1-smooth((d-14)/34)) : 0;
         double target=original;
-        if(original>=sea && original<sea+18 && density(x,sea-4,z)>0
-            && density(x,sea-5,z)>0 && density(x,sea-6,z)>0) {
-            // Keep the successful low-coast relief, including its natural residual pillars.
-            target=planner.sample(x,z,original,sea,mask).targetSurface();
-        }
         double upperBlend=smooth((original-(sea+9))/14);
         if(upperBlend>0) {
             double h=Math.max(0,original-sea);
@@ -146,6 +141,11 @@ public final class CoastalColumnSampler {
             double desired=Math.max(original-96,Math.min(target,bench));
             target+=beach*mask*(desired-target);
         }
+        // Upper-cliff retreat can reveal new low coast. Apply the tidal basin field to
+        // that finished profile too, instead of only to columns originally near sea level.
+        if(original>=sea && target<sea+18 && density(x,sea-4,z)>0
+            && density(x,sea-5,z)>0 && density(x,sea-6,z)>0)
+            target=Math.min(target,planner.sample(x,z,target,sea,mask).targetSurface());
         target=Math.min(original,Math.max(sea-3.5,target));
         return new CoastalLandforms.Base(target,original,mask,beach);
     }
@@ -159,16 +159,26 @@ public final class CoastalColumnSampler {
         return surfaces.get().computeIfAbsent(key(x,z), k -> {
             int y=maxY-1; double above=density(x,y,z);
             if(above>0)return (double)y;
+            // Probe in broad bands, then resolve the highest solid band block by block.
+            // The active cut never restores isolated high rock, even if a thin layer
+            // between two negative probes is missed by this baseline height estimate.
             while(y>sea-32) {
-                double solid=density(x,--y,z);
-                if(solid>0)return y+solid/(solid-above)-0.5;
-                above=solid;
+                int lower=Math.max(sea-32,y-8);
+                double solid=density(x,lower,z);
+                if(solid>0) {
+                    for(int yy=y-1;yy>=lower;yy--) {
+                        double next=yy==lower?solid:density(x,yy,z);
+                        if(next>0)return yy+next/(next-above)-0.5;
+                        above=next;
+                    }
+                }
+                y=lower; above=solid;
             }
             return (double)(sea-32);
         });
     }
     public double beachField(int x,int z) {
-        return smooth((planner.noise(x,z,144,611)-0.48)/0.24);
+        return smooth((planner.noise(x,z,144,611)-0.40)/0.25);
     }
     private double oceanDistance(int x,int z) {
         double distance=96;
@@ -236,6 +246,7 @@ public final class CoastalColumnSampler {
     }
     public double cap(double original, int x, int y, int z, double scale) {
         if(y<sea-3 || y>= (advanced ? maxY : sea+24)) return original;
+        if(!isShore(x,z)) return original;
         Column column=column(x,z); double result=original;
         if(column.active()) {
             double cut=Math.min(original,(column.surface()+0.5-y)*scale);
@@ -252,6 +263,7 @@ public final class CoastalColumnSampler {
     /** Each elevated basin has a single validated water plane, never one level per column. */
     public boolean waterCandidate(int x, int y, int z) {
         if(y<sea-3 || y>= (advanced ? maxY : sea)) return false;
+        if(!isShore(x,z)) return false;
         Column column=column(x,z);
         if(column.active() && y<column.waterLevel() && y>=column.surface()+0.5 && density(x,y,z)>0) return true;
         var arch=arch(x,z);
