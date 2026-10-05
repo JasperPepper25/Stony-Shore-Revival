@@ -59,11 +59,12 @@ class CoastalAquiferTest {
         var columns=new CoastalColumnSampler(42,63,(x,y,z)->(110.5-y)*.15,(x,z)->true,false,(x,z)->false,true,false,192);
         DensityFunction.SinglePointContext p=null;
         for(int x=0;x<192 && p==null;x+=4) for(int z=0;z<192;z+=4)
-            if(columns.waterCandidate(x,109,z)) {p=new DensityFunction.SinglePointContext(x,109,z);break;}
+            {int y=columns.column(x,z).waterLevel()-1;
+                if(y>63 && columns.waterCandidate(x,y,z)) {p=new DensityFunction.SinglePointContext(x,y,z);break;}}
         assertNotNull(p);
         var aquifer=wrap(Blocks.AIR.defaultBlockState(),columns,new AtomicBoolean());
         assertTrue(aquifer.computeSubstance(p,-1).is(Blocks.WATER));
-        assertTrue(aquifer.computeSubstance(new DensityFunction.SinglePointContext(p.blockX(),110,p.blockZ()),-1).isAir());
+        assertTrue(aquifer.computeSubstance(new DensityFunction.SinglePointContext(p.blockX(),columns.column(p.blockX(),p.blockZ()).waterLevel(),p.blockZ()),-1).isAir());
         assertTrue(aquifer.computeSubstance(p,1).isAir());
     }
     @Test void pinnedNoiseChunkHasOneAquiferFieldAndMatchingConstructorHook() throws Exception {

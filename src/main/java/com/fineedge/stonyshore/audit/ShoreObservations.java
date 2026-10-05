@@ -26,7 +26,7 @@ final class ShoreObservations {
         result.addProperty("centerY",origin.getY()); result.addProperty("centerX",origin.getX()); result.addProperty("centerZ",origin.getZ());
         result.addProperty("seaLevel",sea); result.addProperty("minSampleY",minY); result.addProperty("maxSampleY",maxY);
         result.addProperty("spacingBlocks",2);
-        result.addProperty("rowFormat","[x,z,worldSurfaceTopY,biomeAtSeaPlus2,plannedSurfaceOrNull,active,sandStrength,blockPaletteIndicesFromMinToMaxY,plannedWaterLevelOrNull,archCandidate]");
+        result.addProperty("rowFormat","[x,z,worldSurfaceTopY,biomeAtSeaPlus2,plannedSurfaceOrNull,active,sandStrength,blockPaletteIndicesFromMinToMaxY,plannedWaterLevelOrNull,archCandidate,measuredFloorY,blockPaletteIndicesFromFloorMinus4ToPlus12,overhangCandidate]");
         result.addProperty("note","Current blocks, including later feature/player changes. Plan is a raw-density estimate, not measured terrain. Unloaded chunks are skipped. Camera height does not measure basin floor height.");
         Map<String,Integer> palette=new LinkedHashMap<>(); JsonArray rows=new JsonArray();
         int skipped=0;
@@ -47,6 +47,14 @@ final class ShoreObservations {
             row.add(blocks);
             if(column==null)row.add(JsonNull.INSTANCE);else row.add(column.waterLevel());
             row.add(CoastalTerrainIntegration.arch(level,x,z)!=null);
+            int floor=level.getHeight(Heightmap.Types.OCEAN_FLOOR,x,z)-1;
+            row.add(floor);JsonArray groundBand=new JsonArray();
+            for(int y=floor-4;y<=floor+12;y++) {
+                String block=chunk.getBlockState(new BlockPos(x,y,z)).toString();
+                groundBand.add(palette.computeIfAbsent(block,k->palette.size()));
+            }
+            row.add(groundBand);
+            row.add(CoastalTerrainIntegration.overhang(level,x,z)!=null);
             rows.add(row);
         }
         JsonArray states=new JsonArray();palette.keySet().forEach(states::add);

@@ -136,6 +136,11 @@ public final class CoastalTerrainIntegration {
         try { return sampler.arch(x,z); }
         catch(RuntimeException ex) { disable(level,ex);return null; }
     }
+    public static CoastalLandforms.Overhang overhang(ServerLevel level,int x,int z) {
+        var sampler=sampler(level);if(sampler==null)return null;
+        try { return sampler.overhang(x,z); }
+        catch(RuntimeException ex) {disable(level,ex);return null;}
+    }
     private static void disable(ServerLevel level,RuntimeException ex) {
         State state=STATES.get(level);
         if(state!=null && state.failed().compareAndSet(false,true)) LogUtils.getLogger().error("Coastal landform sampling disabled",ex);
@@ -155,6 +160,8 @@ public final class CoastalTerrainIntegration {
                 result.addProperty("eligibleColumnCacheMisses", state.columns().eligibleColumns());
                 result.addProperty("shallowWaterAquiferAttachments", state.columns().aquiferAttachments());
                 result.addProperty("coastalWaterDecisions", state.columns().waterDecisions());
+                JsonObject plans=new JsonObject();state.columns().landformStats().forEach(plans::addProperty);
+                result.add("landformPlanningEvaluations",plans);
             }
         }
         return result;

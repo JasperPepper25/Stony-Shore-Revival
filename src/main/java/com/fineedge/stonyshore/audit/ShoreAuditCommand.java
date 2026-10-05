@@ -74,7 +74,7 @@ public final class ShoreAuditCommand {
         int warnings;
         try (Archive archive = new Archive(output)) {
             JsonObject info = new JsonObject();
-            info.addProperty("format", 4);
+            info.addProperty("format", 5);
             info.addProperty("createdUtc", Instant.now().toString());
             info.addProperty("scope", "Loaded registry encodings, selected packs, worldgen resource stacks, and allowlisted worldgen configs. Includes command-location X/Y/Z and a sparse nearby loaded-block sample. No player inventories, world seed or existing logs are collected. Export failures include diagnostic stack traces. Runtime mixins may make additional changes not represented here.");
             info.add("selectedPacksInRepositoryOrder", GSON.toJsonTree(server.getPackRepository().getSelectedIds()));

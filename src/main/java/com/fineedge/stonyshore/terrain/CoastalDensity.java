@@ -33,7 +33,7 @@ public final class CoastalDensity implements DensityFunction {
     @Override public DensityFunction mapAll(Visitor visitor) {
         return visitor.apply(new CoastalDensity(input.mapAll(visitor), columns, scale, failed));
     }
-    @Override public double minValue() { return Math.min(input.minValue(), -64); }
+    @Override public double minValue() { return Math.min(input.minValue(), -4096); }
     @Override public double maxValue() { return input.maxValue(); }
     @Override public KeyDispatchDataCodec<? extends DensityFunction> codec() {
         // Like NoiseChunk's runtime caches, this captures live state and is not a datapack value.

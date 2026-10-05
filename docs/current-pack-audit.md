@@ -111,3 +111,13 @@ User testing reports successful natural pools and smooth transitions. The new
 request is elevated terraced pools, cliff-attached arches, wider cliff-foot
 beaches, debris/vegetation, and sand extending underwater. See
 [terrain.3 design and validation limits](terrain-test-3.md).
+
+
+## October 3 15:23 terrain.3 audit
+
+Export complete, no read/size errors; adapter installed and not failed. Terrain
+Slabs is 4.1.1-beta. The local sample at 1549/-3584, camera Y=138, has 1042 ocean
+and 47 stony-shore columns, two active plans, only sea-level water planes, zero
+arch candidates and an entirely air block palette at Y=106..154. This local
+sample cannot measure the pictured low terrain or prove global feature absence.
+See [terrain.4 findings and changes](terrain-test-4.md).

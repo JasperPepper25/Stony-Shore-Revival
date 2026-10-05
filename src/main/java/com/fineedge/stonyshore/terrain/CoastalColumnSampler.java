@@ -21,6 +21,7 @@ public final class CoastalColumnSampler {
     private final boolean sandyShelves;
     private final CoastalLandforms landforms;
     private final ThreadLocal<Map<Long, CoastalLandforms.Base>> bases = ThreadLocal.withInitial(() -> boundedMap(8192));
+    private final ThreadLocal<Map<Long, Double>> surfaces = ThreadLocal.withInitial(() -> boundedMap(8192));
     private final ThreadLocal<Map<Long, Boolean>> oceans = ThreadLocal.withInitial(() -> boundedMap(8192));
     private final ThreadLocal<Map<Long, Column>> columns = ThreadLocal.withInitial(() -> boundedMap(1024));
     private final ThreadLocal<Map<Long, Boolean>> biomes = ThreadLocal.withInitial(() -> boundedMap(2048));
@@ -115,20 +116,10 @@ public final class CoastalColumnSampler {
         return bases.get().computeIfAbsent(key(x,z), k -> planBase(x,z));
     }
     private CoastalLandforms.Base planBase(int x,int z) {
-        // Coarse vertical search followed by a fractional crossing. Bounds come from this
-        // world's build height; high stony shores are no longer rejected at one fixed Y.
-        int y=maxY-1;
-        while(y>sea-16 && density(x,y,z)<=0) y-=8;
-        if(y<=sea-16 && density(x,y,z)<=0) return new CoastalLandforms.Base(sea-16,sea-16,0,0);
-        int upper=Math.min(maxY-1,y+8);
-        double above=density(x,upper,z);
-        while(upper>y+1 && density(x,upper-1,z)<=0) { upper--; above=density(x,upper,z); }
-        int solidY=upper-1;double solid=density(x,solidY,z);
-        double original=solidY+solid/(solid-above)-0.5;
-        if(!Double.isFinite(original)) return new CoastalLandforms.Base(maxY-1,maxY-1,0,0);
+        double original=surface(x,z);
         if(!isShore(x,z) || !surfaceShore.contains(x,(int)Math.round(original),z))
             return new CoastalLandforms.Base(original,original,0,0);
-        double mask=boundaryMask(x,z), d=oceanDistance(x,z);
+        double mask=Math.min(boundaryMask(x,z),surfaceMask(x,z,(int)Math.round(original))), d=oceanDistance(x,z);
         double beach=sandyShelves ? beachField(x,z)*(1-smooth((d-12)/24)) : 0;
         double target=original;
         if(original>=sea && original<sea+18 && density(x,sea-4,z)>0
@@ -140,11 +131,10 @@ public final class CoastalColumnSampler {
         if(upperBlend>0) {
             double h=Math.max(0,original-sea);
             double coastal=h*(0.08+0.92*smooth(d/96));
-            double warp=5*(planner.noise(x,z,180,601)-0.5);
-            double band=(coastal+warp)/16;
-            double tier=Math.floor(band);
-            double stepped=(tier+smooth((band-tier-0.52)/0.42))*16-warp;
-            double profile=sea+Math.max(1,0.12*coastal+0.88*stepped);
+            // Continuous coastal slope. Local validated shelf plans create ledges;
+            // there are no global elevation bands shared along an entire coastline.
+            double retention=smooth((planner.noise(x,z,48,601)-0.35)/0.4);
+            double profile=sea+Math.max(1,coastal+(h-coastal)*retention*0.8);
             double proposed=original+mask*(Math.max(original-96,Math.min(original,profile))-original);
             target+=upperBlend*(proposed-target);
         }
@@ -159,6 +149,24 @@ public final class CoastalColumnSampler {
         target=Math.min(original,Math.max(sea-3.5,target));
         return new CoastalLandforms.Base(target,original,mask,beach);
     }
+    private double surface(int x,int z) {
+        int gx=Math.floorDiv(x,4)*4,gz=Math.floorDiv(z,4)*4;
+        double fx=Math.floorMod(x,4)/4.0,fz=Math.floorMod(z,4)/4.0;
+        double a=surfaceNode(gx,gz),b=surfaceNode(gx+4,gz),c=surfaceNode(gx,gz+4),d=surfaceNode(gx+4,gz+4);
+        return (a+(b-a)*fx)*(1-fz)+(c+(d-c)*fx)*fz;
+    }
+    private double surfaceNode(int x,int z) {
+        return surfaces.get().computeIfAbsent(key(x,z), k -> {
+            int y=maxY-1; double above=density(x,y,z);
+            if(above>0)return (double)y;
+            while(y>sea-32) {
+                double solid=density(x,--y,z);
+                if(solid>0)return y+solid/(solid-above)-0.5;
+                above=solid;
+            }
+            return (double)(sea-32);
+        });
+    }
     public double beachField(int x,int z) {
         return smooth((planner.noise(x,z,144,611)-0.48)/0.24);
     }
@@ -172,6 +180,16 @@ public final class CoastalColumnSampler {
         }
         return distance;
     }
+    private double surfaceMask(int x,int z,int y) {
+        double distance=12; int gx=Math.floorDiv(x,4)*4,gz=Math.floorDiv(z,4)*4;
+        for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++) {
+            int px=gx+dx*4,pz=gz+dz*4;
+            if(surfaceShore.contains(px,y,pz) || isOcean(px,pz))continue;
+            double nx=Math.max(0,Math.max(px-x,x-(px+4))),nz=Math.max(0,Math.max(pz-z,z-(pz+4)));
+            distance=Math.min(distance,Math.hypot(nx,nz));
+        }
+        return smooth(distance/12);
+    }
     private boolean isOcean(int x,int z) {
         int qx=Math.floorDiv(x,4),qz=Math.floorDiv(z,4);
         return oceans.get().computeIfAbsent(key(qx,qz),k->ocean.contains(qx*4,qz*4));
@@ -181,10 +199,13 @@ public final class CoastalColumnSampler {
         if(base.mask()>0) {
             var arch=landforms.arch(x,z);
             if(arch!=null) surface+=arch.reserve(x,z)*(base.original()-surface);
+            var overhang=landforms.overhang(x,z);
+            if(overhang!=null) surface+=overhang.reserve(x,z)*(base.original()-surface);
+            surface=landforms.shelfSurface(x,z,surface);
             var pool=landforms.pool(x,z);
             if(pool!=null) {
                 surface=landforms.poolFloor(pool,x,z,surface);
-                if(surface+0.5<pool.water()) water=pool.water();
+                if(landforms.containsPool(pool,x,z) && surface+0.5<pool.water()) water=pool.water();
             }
         }
         boolean active=surface<base.original()-1e-6;
@@ -194,20 +215,24 @@ public final class CoastalColumnSampler {
     public CoastalLandforms.Arch arch(int x,int z) {
         return advanced && isShore(x,z) && base(x,z).mask()>0 ? landforms.arch(x,z) : null;
     }
+    public CoastalLandforms.Overhang overhang(int x,int z) {
+        return advanced && isShore(x,z) && base(x,z).mask()>0 ? landforms.overhang(x,z) : null;
+    }
+    public java.util.Map<String,Long> landformStats() { return advanced?landforms.stats():java.util.Map.of(); }
     /** Material-only apron: adjacent ocean floor can receive sand, but its density is unchanged. */
     public double sandCover(int x,int z,int floorY) {
-        if(!advanced || !sandyShelves || floorY<sea-11 || floorY>sea+5) return 0;
+        if(!advanced || !sandyShelves || floorY<sea-24 || floorY>sea+5) return 0;
         double strength=isShore(x,z) ? base(x,z).sand() : 0;
         if(strength==0 && isOcean(x,z)) {
-            for(int dx=-12;dx<=12;dx+=4) for(int dz=-12;dz<=12;dz+=4) {
+            for(int dx=-32;dx<=32;dx+=4) for(int dz=-32;dz<=32;dz+=4) {
                 double d=Math.hypot(dx,dz);
-                if(d>12 || !isShore(x+dx,z+dz)) continue;
+                if(d>32 || !isShore(x+dx,z+dz)) continue;
                 var b=base(x+dx,z+dz);
                 if(b.surface()>sea+5) continue;
-                strength=Math.max(strength,b.sand()*(1-smooth(d/16)));
+                strength=Math.max(strength,b.sand()*(1-smooth(d/36)));
             }
         }
-        return strength*(1-smooth((sea-2-floorY)/9.0));
+        return strength*(1-smooth((sea-6-floorY)/18.0));
     }
     public double cap(double original, int x, int y, int z, double scale) {
         if(y<sea-3 || y>= (advanced ? maxY : sea+24)) return original;
@@ -215,11 +240,13 @@ public final class CoastalColumnSampler {
         if(column.active()) {
             double cut=Math.min(original,(column.surface()+0.5-y)*scale);
             double start=advanced ? Math.max(sea+12,column.original()+2) : sea+12;
-            double fade=1-smooth((y-start)/12.0);
+            double fade=advanced ? 1 : 1-smooth((y-start)/12.0);
             result=original+fade*(cut-original);
         }
         var arch=arch(x,z);
         if(arch!=null) result=Math.min(result,arch.opening(x,y,z)*0.4);
+        var overhang=overhang(x,z);
+        if(overhang!=null) result=Math.min(result,overhang.opening(x,y,z)*0.4);
         return result;
     }
     /** Each elevated basin has a single validated water plane, never one level per column. */

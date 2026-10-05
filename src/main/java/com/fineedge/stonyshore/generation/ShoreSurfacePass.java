@@ -40,12 +40,18 @@ public final class ShoreSurfacePass {
             for (int z = minZ; z < minZ + 16; ++z) {
                 int top = world.getHeight(coastalTerrain ? Heightmap.Types.OCEAN_FLOOR_WG
                     : Heightmap.Types.WORLD_SURFACE_WG, x, z) - 1;
-                if (top < sea - 11) continue;
+                if (top < sea - 24) continue;
                 BlockPos surface = new BlockPos(x, top, z);
                 boolean stony=world.getBiome(surface).is(Biomes.STONY_SHORE);
                 boolean ocean=world.getBiome(surface).is(BiomeTags.IS_OCEAN);
                 if(apronOnly ? !ocean : !stony) continue;
-                if(regional) any |= sandCap(world,surface,CoastalTerrainIntegration.sandCover(world.getLevel(),x,z,top));
+                if(regional) {
+                    // Terrain Slabs can finish before this pass; recolor its generated slab
+                    // along with the supporting beach instead of rejecting the whole cap.
+                    BlockState slab=world.getBlockState(surface);
+                    BlockPos floor=BeachMaterials.generatedStoneSlab(slab) ? surface.below() : surface;
+                    any |= sandCap(world,floor,CoastalTerrainIntegration.sandCover(world.getLevel(),x,z,floor.getY()));
+                }
                 if(apronOnly) continue;
                 boolean cold = ShoreConfig.COLD.get() && isCold(world, surface);
                 boolean coast = !coastalTerrain && top >= sea && top <= sea + 8
@@ -103,7 +109,7 @@ public final class ShoreSurfacePass {
         int sea=world.getSeaLevel();
         if(coverage<=0) return false;
         BlockState above=world.getBlockState(surface.above());
-        if(!above.isAir() && above.getFluidState().isEmpty()) return false;
+        if(!above.isAir() && above.getFluidState().isEmpty() && !BeachMaterials.generatedStoneSlab(above)) return false;
         double upper=Math.max(0,Math.min(1,(surface.getY()-(sea+2))/4.0));
         coverage*=1-upper*upper*(3-2*upper);
         // Fine-grained thinning is confined to margins/deeper water; strong interiors stay solid.
@@ -117,12 +123,16 @@ public final class ShoreSurfacePass {
         world.setBlock(surface.below(2),Blocks.SANDSTONE.defaultBlockState(),2);
         world.setBlock(surface.below(),Blocks.SAND.defaultBlockState(),2);
         world.setBlock(surface,Blocks.SAND.defaultBlockState(),2);
+        if(BeachMaterials.generatedStoneSlab(above)) {
+            Block sandSlab=optionalBlock("terrain_slabs:sand_slab");
+            if(sandSlab!=null) world.setBlock(surface.above(),BeachMaterials.copySlab(above,sandSlab),2);
+        }
         return true;
     }
     private static boolean isSandSubstrate(BlockState state) {
-        return isSourceStone(state) || state.is(Blocks.SAND) || state.is(Blocks.SANDSTONE)
+        return !state.hasBlockEntity() && (state.is(net.minecraftforge.common.Tags.Blocks.ORES) || isSourceStone(state) || state.is(Blocks.SAND) || state.is(Blocks.SANDSTONE)
             || state.is(Blocks.GRAVEL) || state.is(Blocks.COBBLESTONE) || state.is(Blocks.MOSSY_COBBLESTONE)
-            || state.is(Blocks.TUFF);
+            || state.is(Blocks.TUFF));
     }
 
     private static BlockState palette(BlockState old, int y, int top, int sea, double band,
