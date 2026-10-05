@@ -34,10 +34,15 @@ class CoastalLandformsTest {
     @Test void archesRequireOpenPortalsAndSupportedPiers() {
         int accepted=0;
         for(int seed=0;seed<40;seed++) {
-            var plans=new CoastalLandforms(seed,63,(x,z)->new CoastalLandforms.Base(70,Math.abs(z-32)<10?115:62,1,0),
+            var plans=new CoastalLandforms(seed,63,(x,z)->new CoastalLandforms.Base(Math.abs(z-32)<10?100:62,Math.abs(z-32)<10?115:62,1,0),
                 (x,y,z)->(Math.abs(z-32)<10?115.5:62.5)-y,(x,z)->true,true);
             var a=plans.arch(32,32);
-            if(a!=null) {accepted++;assertTrue(a.opening(a.x(),70,a.z())<0);}
+            if(a!=null) {
+                accepted++;assertTrue(a.opening(a.x(),70,a.z())<0);
+                int px=(int)Math.round(a.x()-Math.sin(a.angle())*(a.length()+2));
+                int pz=(int)Math.round(a.z()+Math.cos(a.angle())*(a.length()+2));
+                assertEquals(0,a.reserve(px,pz),1e-6,"Reserved roof must not seal a portal");
+            }
             var cliff=new CoastalLandforms(seed,63,(x,z)->new CoastalLandforms.Base(110,110,1,0),
                 (x,y,z)->110.5-y,(x,z)->true,true);
             assertNull(cliff.arch(48,48)); // A blind tunnel is not an arch.
