@@ -4,7 +4,8 @@ Version: 0.6.0-terrain.6, Minecraft 1.20.1 / Forge 47.
 
 ## Terrain integration
 
-Two `lithostitched:wrap_noise_router` modifiers, priority 1100, install registered
+Two `lithostitched:wrap_noise_router` modifiers under the Forge registry directory
+`data/stonyshorerevival/lithostitched/worldgen_modifier`, priority 1100, install registered
 `stonyshorerevival:coastal_density` nodes in the preliminary and final density
 fields before `RandomState` seeding. The loaded Tectonic/Terralith graph is the
 wrapped input. There is no reflective replacement of the live seeded router.

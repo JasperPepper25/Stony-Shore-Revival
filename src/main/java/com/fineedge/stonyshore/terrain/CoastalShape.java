@@ -114,14 +114,15 @@ public final class CoastalShape {
             if(suitable) {
                 shelf=new CoastalLandforms.Pool(x,z,rx,rz,angle,water,3,1007);
                 if(options.pools) pool=new CoastalLandforms.Pool(x,z,rx*0.46,rz*0.46,angle,water,2+(int)(3*noise.value(cx,cz,1008)),1007);
-                count("shelvesAccepted");if(pool!=null)count("poolsAccepted");
+                
             } else count("shelvesRejectedSlopeOrBoundary");
         }
-        // Arches and overhangs have independent chances; a shelf never suppresses them.
+        // Select landforms separately, then reject overlapping geometry.
         if(options.arches && g.oceanDistance<48 && g.height>sea+24 && noise.value(cx,cz,900)<0.12) {
             arch=new CoastalLandforms.Arch(x,z,noise.value(cx,cz,901)*Math.PI,5+3*noise.value(cx,cz,902),
                 10+5*noise.value(cx,cz,903),15+12*noise.value(cx,cz,904),noise.value(cx,cz,905)*2-1,sea);
             // Keep elevated pools outside the arch mass; the overhang test remains independent.
+            if(shelf!=null)count("shelvesReplacedByArch");
             shelf=null;pool=null;count("archesAccepted");
         }
         if(g.height>sea+24 && noise.value(cx,cz,1200)<0.38) {
@@ -138,6 +139,7 @@ public final class CoastalShape {
                 } else count("overhangsRejectedSupportOrOverlap");
             } else count("overhangsRejectedSlope");
         }
+        if(shelf!=null)count("shelvesAccepted");if(pool!=null)count("poolsAccepted");
         return new Region(shelf,pool,arch,overhang);
     }
     public double density(double original,int x,int y,int z,double scale) {

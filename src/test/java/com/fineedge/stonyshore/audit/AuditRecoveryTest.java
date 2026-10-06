@@ -13,9 +13,9 @@ class AuditRecoveryTest {
             queried.add(root);
             return Map.of(root + "/sample.json", "data");
         }, (stage, failure) -> fail(stage, failure));
-        assertEquals(10, queried.size());
-        assertTrue(queried.containsAll(List.of("worldgen/density_function", "worldgen/noise_settings", "forge/biome_modifier")));
-        assertEquals(10, result.size());
+        assertEquals(13, queried.size());
+        assertTrue(queried.containsAll(List.of("worldgen/density_function", "worldgen/noise_settings", "forge/biome_modifier", "lithostitched/worldgen_modifier", "lithostitched/biome_injector")));
+        assertEquals(13, result.size());
     }
     @Test void brokenResourceDirectoryRetainsOtherDirectoriesAndReportsCause() {
         Map<String, RuntimeException> failures = new LinkedHashMap<>();
@@ -24,7 +24,7 @@ class AuditRecoveryTest {
             if (root.equals("worldgen/biome")) throw original;
             return Map.of(root, "data");
         }, failures::put);
-        assertEquals(9, result.size());
+        assertEquals(12, result.size());
         assertTrue(result.containsKey("tags/worldgen"));
         assertSame(original, failures.get("resource listing: worldgen/biome"));
     }

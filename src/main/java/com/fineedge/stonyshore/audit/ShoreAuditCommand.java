@@ -177,10 +177,11 @@ public final class ShoreAuditCommand {
         String path = id.getPath();
         return path.endsWith(".json") && (path.startsWith("worldgen/density_function/")
             || path.startsWith("worldgen/noise_settings/") || path.startsWith("worldgen/noise/")
+            || path.startsWith("worldgen/multi_noise_biome_source_parameter_list/")
             || path.startsWith("worldgen/world_preset/") || path.startsWith("worldgen/biome/")
             || path.startsWith("dimension/")
             || path.startsWith("dimension_type/") || path.startsWith("forge/biome_modifier/")
-            || path.startsWith("worldgen_modifier/") || path.startsWith("biome_injector/")
+            || path.startsWith("lithostitched/worldgen_modifier/") || path.startsWith("lithostitched/biome_injector/")
             || path.startsWith("forge/structure_modifier/") || path.startsWith("tags/worldgen/"));
     }
 

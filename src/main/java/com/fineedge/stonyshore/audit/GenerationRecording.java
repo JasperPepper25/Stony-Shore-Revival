@@ -14,9 +14,9 @@ public final class GenerationRecording {
     private static final Map<ServerLevel,Session> SESSIONS=Collections.synchronizedMap(new WeakHashMap<>());
     private static final Map<RandomState,Session> RANDOM=Collections.synchronizedMap(new WeakHashMap<>());
     private static final class ChunkSample {
-        final int x,z;final long firstNoise;
+        final int x,z;long firstNoise;
         long featureNanos,loadedElapsedNanos;int featurePasses,noiseConstructions;
-        ChunkSample(int x,int z) {this.x=x;this.z=z;firstNoise=System.nanoTime();}
+        ChunkSample(int x,int z) {this.x=x;this.z=z;}
     }
     private static final class Session {
         boolean active=true;final String started=Instant.now().toString();String stopped;
@@ -44,7 +44,8 @@ public final class GenerationRecording {
     }
     public static void noiseStarted(RandomState random,int blockX,int blockZ) {
         var s=RANDOM.get(random);if(s==null)return;
-        synchronized(s){if(s.active)s.chunk(Math.floorDiv(blockX,16),Math.floorDiv(blockZ,16)).noiseConstructions++;}
+        synchronized(s){if(s.active){var c=s.chunk(Math.floorDiv(blockX,16),Math.floorDiv(blockZ,16));
+            if(c.firstNoise==0)c.firstNoise=System.nanoTime();c.noiseConstructions++;}}
     }
     public static void feature(ServerLevel level,ChunkPos chunk,long nanos) {
         var s=SESSIONS.get(level);if(s==null)return;
@@ -53,7 +54,7 @@ public final class GenerationRecording {
     public static void loaded(net.minecraftforge.event.level.ChunkEvent.Load event) {
         if(!(event.getLevel() instanceof ServerLevel level))return;
         var s=SESSIONS.get(level);if(s==null)return;var pos=event.getChunk().getPos();
-        synchronized(s){var c=s.chunks.get(pos.toLong());if(s.active && c!=null)c.loadedElapsedNanos=System.nanoTime()-c.firstNoise;}
+        synchronized(s){var c=s.chunks.get(pos.toLong());if(s.active && c!=null && c.firstNoise>0)c.loadedElapsedNanos=System.nanoTime()-c.firstNoise;}
     }
     public static JsonObject snapshot(ServerLevel level) {
         JsonObject result=new JsonObject();var s=SESSIONS.get(level);
