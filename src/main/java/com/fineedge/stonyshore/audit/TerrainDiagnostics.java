@@ -56,6 +56,9 @@ final class TerrainDiagnostics {
                 row.addProperty("originalHeightEstimate",planned.original());row.addProperty("plannedSurface",planned.surface());
                 row.addProperty("influence",planned.mask());row.addProperty("sandStrength",planned.sand());row.addProperty("plannedWaterPlane",waterPlane);
                 row.addProperty("plannedVersusMeasuredFloorDelta",floor-planned.surface());
+                row.addProperty("rawDensityAtPlannedWaterLevel",random.router().finalDensity()
+                    .compute(new DensityFunction.SinglePointContext(x,waterPlane-1,z)));
+                row.addProperty("blockAtPlannedWaterLevel",chunk.getBlockState(new BlockPos(x,waterPlane-1,z)).toString());
                 row.addProperty("excavationFromOriginalEstimateToFloor",planned.original()-floor);
                 if(planned.pool()!=null) {row.addProperty("poolDepthBelowWaterPlane",waterPlane-1-floor);row.addProperty("plannedPoolDepth",planned.pool().depth());}
                 if(planned.arch()!=null && seen.add("arch:"+planned.arch().x()+":"+planned.arch().z()))

@@ -23,14 +23,16 @@ ocean boundaries. Below sea level minus 24, existing density is retained; the
 coastal body blends in over the next 12 blocks. Original old-world `Blender`
 contexts also bypass the coastal node. This is not a retrofit of existing chunks.
 
-Shared bounded caches replace per-worker copies. Preliminary-density height
+Shared bounded caches replace per-worker copies, including surface biome checks
+at Minecraft's four-block biome sampling resolution. Preliminary-density height
 estimates use a 16-block horizontal grid and bounded vertical crossing probes;
 they remain estimates, not measurements. Planning never loads chunks. Exact
 biome checks at Y65 and the estimated original surface constrain the influence.
 
 Regional shelves have elevations relative to nearby modeled ground, with a
 maximum eight-block perimeter deviation. Pool depth is 2–4 blocks below one
-water plane. Basins have constructed floors; water handling retains the pack
+water plane. Fine surface modulation fades out near sea level so it cannot
+conflict with shallow water plans. Basins have constructed floors; water handling retains the pack
 aquifer and fills qualified basin air. Arch approaches are carved open as part
 of their geometry, and overhangs retain a constructed roof. Neighboring region
 plans are evaluated across cell edges. Shelf, arch and overhang candidates have
@@ -93,3 +95,29 @@ are exported independently. Verification of sampled openings/roofs does not
 prove whole-feature connectivity. Full-pack appearance, throughput and standalone
 seed-based LOD generation need in-game comparison; synthetic tests alone cannot
 establish those properties.
+
+## Verification on October 6
+
+- 52 automated tests passed locally. Coverage includes registered density codec
+  round trips, independent world bindings, fail-closed sampling, unmodified
+  neighboring biomes/deep density, elevated basin floors and water planes,
+  sea-level density/water consistency, arch portals and roof, overhang exterior
+  access, terrain determinism after cache eviction, and biome query reuse.
+- The production remapped JAR loaded on Forge 47.2.0 with official Tectonic
+  3.0.17, Terralith 2.5.4 and Lithostitched 1.4.11. The server reported the native
+  graph active, prepared spawn, generated coastal chunks and shut down cleanly.
+- A regenerated test shore around X=-992/Z=-608 had 289 loaded column samples.
+  All nine samples expecting sea-level water contained it at the planned level.
+  The audit completed without read/size warnings and included all four diagnostic
+  files. These samples do not establish filling correctness in every basin.
+- Recording was exercised during new generation: its 256-sample limit, reported
+  evictions, feature measurements and constructor-to-loaded observations were
+  exported. This remains bounded observation, not whole-world history.
+- The final test-area planning counters recorded about 439,000 reused surface
+  biome lookups and 7,000 cache misses. This checks query reuse; it is not a
+  controlled benchmark of total chunk throughput.
+
+This is a minimal compatibility test, not the entire customized pack. No elevated
+pool or full arch/overhang was inspected in that particular loaded-block sample;
+those geometry checks are synthetic. Full-pack appearance, frequency, higher
+basin depth and performance still need fresh-chunk testing and format-6 audits.

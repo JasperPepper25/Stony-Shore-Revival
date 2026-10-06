@@ -16,6 +16,13 @@ class NativeCoastalModelTest {
         assertEquals(0,model.ground(0,24).mask());assertEquals(1,model.ground(24,24).mask());
         assertEquals(.2,model.cap(.2,-1,90,24,.15));
     }
+    @Test void reusesSurfaceBiomeQueriesAcrossNeighboringColumns() {
+        var queries=new AtomicInteger();
+        var model=new NativeCoastalModel(42,63,192,(x,y,z)->(110-y)*.15,(x,z)->true,(x,z)->false,
+            (x,y,z)->{queries.incrementAndGet();return true;},new CoastalShape.Options(false,true,false,false,0));
+        for(int x=0;x<16;x++)for(int z=0;z<16;z++)assertEquals(1,model.ground(x,z).mask());
+        assertTrue(queries.get()<150,"neighbor masks must reuse the same quart climate samples");
+    }
     @Test void respectsTheBiomeAtOriginalSurfaceAsWellAsSeaLevel() {
         var model=new NativeCoastalModel(42,63,192,(x,y,z)->(110-y)*.15,(x,z)->true,(x,z)->false,
             (x,y,z)->false,new CoastalShape.Options(true,true,true,true,.65));

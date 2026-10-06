@@ -1,8 +1,20 @@
 # Terrain rewrite development branch
 
-**0.5.0-terrain.5 broadens coastal basin and sand placement, smooths sandy edges, and reduces expensive height sampling.** See [installation and test instructions](docs/terrain-test-5.md) and [current pack findings](docs/current-pack-audit.md). Use a fresh disposable test world; existing generated chunks are not repaired.
+**0.6.0-terrain.6 composes native coastal density through Lithostitched before worldgen seeding.**
+It constructs coastal rock, local ledges and contained elevated pools, opens arch and overhang
+approaches, and retains the surface and vegetation passes. Biome placement remains unchanged.
+The supported test combination is Tectonic 3.0.17 / Terralith 2.5.4 / Lithostitched 1.4.11,
+Minecraft 1.20.1, sea level 63, without WWOO.
 
-The original [rewrite plan](docs/terrain-rewrite.md) documents the earlier diagnostic milestone; its audit-only behavior has been superseded by this test.
+See [installation, diagnostics and test instructions](docs/terrain-test-6.md).
+Use `/stonyshore record start` before exploring, `/stonyshore record stop` afterward,
+and `/stonyshore audit` near each formation. Format-6 reports include loaded-block measurements,
+planned terrain, water checks, climate samples, density sections, SVG maps and bounded recording
+history. Recording is optional and does not scan the whole world. Use a fresh test world;
+existing generated chunks are not repaired.
+
+The original [rewrite plan](docs/terrain-rewrite.md) and older test notes are historical.
+Their runtime router replacement approach has been superseded by the native density nodes.
 
 ---
 
@@ -24,7 +36,7 @@ A Forge 1.20.1 source project for an additive stony-shore overhaul. The GitHub A
 
 ## Build and use
 
-The `Build Forge mod` GitHub Actions workflow installs Java 17 and Java 25, runs Gradle 9.3.1 on Java 25, and compiles Minecraft 1.20.1 bytecode with the Java 17 toolchain. Its downloadable artifact contains the `-srg.jar` for use in the pack. For a local build, install both JDKs and Gradle 9.3.1, run `gradle clean build`, and use only the `-srg.jar` under `build/libs/`.
+The `Build Forge mod` GitHub Actions workflow installs Java 17 and Java 25, runs Gradle 9.3.1 on Java 25, and compiles Minecraft 1.20.1 bytecode with the Java 17 toolchain. Its downloadable artifact contains the `-srg.jar` for use in the pack. For a local build, install these JDKs, Java 8 for the default Renamer toolchain, and Gradle 9.3.1, run `gradle clean build`, and use only the `-srg.jar` under `build/libs/`.
 
 Use a duplicate ATM9 instance and a backed-up world for the first test; put the built JAR in that instance's `mods` folder on both sides if running a server. The new feature appears **only in newly generated chunks**. In a new creative test world, use `/locate biome minecraft:stony_shore` and compare warm and cold shores from several angles. Turn off shaders for one comparison if block colors are hard to judge.
 

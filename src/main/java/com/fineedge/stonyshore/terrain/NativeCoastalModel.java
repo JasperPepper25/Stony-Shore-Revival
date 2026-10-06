@@ -13,6 +13,8 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
     private final CoastalShape shape;
     private final BoundedCache<Long,Double> heights=new BoundedCache<>(4096);
     private final BoundedCache<Long,Integer> biomes=new BoundedCache<>(16384);
+    private record SurfaceKey(int x,int y,int z) {}
+    private final BoundedCache<SurfaceKey,Boolean> surfaceBiomes=new BoundedCache<>(16384);
     private final BoundedCache<Long,CoastalShape.Ground> grounds=new BoundedCache<>(8192);
     private final LongAdder probes=new LongAdder(),planningNanos=new LongAdder(),water=new LongAdder(),aquifers=new LongAdder();
     public NativeCoastalModel(long seed,int sea,int maxY,Terrain baseline,Shore shore,Shore ocean,
@@ -24,6 +26,10 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
     private int biome(int x,int z) {
         int qx=Math.floorDiv(x,4),qz=Math.floorDiv(z,4);
         return biomes.get(CoastalShape.key(qx,qz),k->shore.contains(qx*4,qz*4)?1:ocean.contains(qx*4,qz*4)?2:0);
+    }
+    private boolean surfaceBiome(int x,int y,int z) {
+        var key=new SurfaceKey(Math.floorDiv(x,4),Math.floorDiv(y,4),Math.floorDiv(z,4));
+        return surfaceBiomes.get(key,k->surfaceShore.contains(k.x()*4,k.y()*4,k.z()*4));
     }
     private double probe(int x,int y,int z) {
         probes.increment();double value=baseline.density(x,y,z);
@@ -56,13 +62,13 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
             try {
                 if(biome(x,z)!=1)return new CoastalShape.Ground(sea,0,96);
                 double height=originalHeight(x,z);
-                if(!surfaceShore.contains(x,(int)Math.round(height),z))
+                if(!surfaceBiome(x,(int)Math.round(height),z))
                     return new CoastalShape.Ground(height,0,96);
                 int qx=Math.floorDiv(x,4),qz=Math.floorDiv(z,4);double distance=12;
                 for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++) {
                     int bx=(qx+dx)*4,bz=(qz+dz)*4;
                     // Ocean is a true boundary too. Reach zero before the exact-biome gate.
-                    if(biome(bx,bz)==1 && surfaceShore.contains(bx,(int)Math.round(height),bz))continue;
+                    if(biome(bx,bz)==1 && surfaceBiome(bx,(int)Math.round(height),bz))continue;
                     double nx=Math.max(0,Math.max(bx-x,x-(bx+4))),nz=Math.max(0,Math.max(bz-z,z-(bz+4)));
                     distance=Math.min(distance,Math.hypot(nx,nz));
                 }
@@ -115,6 +121,7 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
         var s=new TreeMap<>(shape.stats());s.put("baselineDensityProbes",probes.sum());
         s.put("heightCacheHits",heights.hits());s.put("heightCacheMisses",heights.misses());
         s.put("groundCacheHits",grounds.hits());s.put("groundCacheMisses",grounds.misses());
+        s.put("surfaceBiomeCacheHits",surfaceBiomes.hits());s.put("surfaceBiomeCacheMisses",surfaceBiomes.misses());
         s.put("groundPlanningNanos",planningNanos.sum());return s;
     }
 }

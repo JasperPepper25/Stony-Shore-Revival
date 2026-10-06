@@ -38,6 +38,15 @@ class CoastalShapeTest {
         }
         assertFalse(shape.waterCandidate(px,found.water(),pz));
     }
+    @Test void seaLevelWaterPlansDoNotConflictWithSurfaceRoughness() {
+        var shape=shape(123,(x,z)->new CoastalShape.Ground(64,1,24),true,false);
+        int planned=0;
+        for(int x=-128;x<=128;x+=4)for(int z=-128;z<=128;z+=4)for(int y=60;y<63;y++)
+            if(shape.waterCandidate(x,y,z)) {
+                planned++;assertTrue(shape.density(1,x,y,z,.15)<=0,"planned water must occupy air density");
+            }
+        assertTrue(planned>100);
+    }
     @Test void orderAndCacheEvictionDoNotChangeTerrain() {
         var ground=(CoastalShape.GroundSampler)(x,z)->new CoastalShape.Ground(110+x*.06,1,24);
         var a=shape(99,ground,true,true);var b=shape(99,ground,true,true);

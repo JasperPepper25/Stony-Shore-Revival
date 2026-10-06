@@ -156,7 +156,8 @@ public final class CoastalShape {
         // Match both the upper surface and the cliff body. Small 3D modulation adds depth.
         double rough=(noise.noise(x+y*0.37,z-y*0.21,19,1701)-0.5)*1.1;
         if(c.pool!=null) rough=0;
-        else if(c.sand>0.55) rough*=0.12;
+        else rough*=smooth((c.surface-sea)/4.0);
+        if(c.sand>0.55) rough*=0.12;
         double sculpt=(c.surface+0.5-y+rough)*scale;
         if(c.arch!=null)sculpt=Math.min(sculpt,c.arch.opening(x,y,z)*0.4);
         if(c.overhang!=null)sculpt=Math.min(sculpt,c.overhang.opening(x,y,z)*0.4);
