@@ -63,7 +63,7 @@ public final class ShoreBlocks {
             ResourceLocation key = ResourceLocation.tryParse(id);
             if (key != null && ForgeRegistries.BLOCKS.containsKey(key)) {
                 Block block = ForgeRegistries.BLOCKS.getValue(key);
-                if (block != null && block != Blocks.AIR) blocks.add(block);
+                if (block != null && block != Blocks.AIR && !QuarkStonePolicy.excluded(key.toString(),true,false)) blocks.add(block);
             }
         }
         return blocks;

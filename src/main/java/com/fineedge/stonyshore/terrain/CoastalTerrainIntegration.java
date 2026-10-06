@@ -154,7 +154,11 @@ public final class CoastalTerrainIntegration {
         result.addProperty("adapter", "lithostitched-1.4.11-preseed-native-density");
         result.addProperty("injectionPriority",1100);
         result.addProperty("runtimeRouterReplacement",false);
-        result.addProperty("densityConstruction","3D coastal solid/air field blended with loaded pack density");
+        result.addProperty("densityConstruction","adaptive original-terrain profiles; cave-preserving cuts and bounded surface construction");
+        result.addProperty("inlandTransitionWidthBlocks","24–48, based on original height");
+        result.addProperty("quarkStoneExclusion","per-destination jasper/shale/limestone in shore biome or shore surface columns; optional Quark mixin");
+        result.addProperty("quarkClusterHookObserved",com.fineedge.stonyshore.generation.QuarkStonePolicy.hookObserved());
+        result.addProperty("quarkStonePlacementsRejectedProcessTotal",com.fineedge.stonyshore.generation.QuarkStonePolicy.rejectedPlacements());
         result.addProperty("biomePlacementModified",false);
         result.addProperty("regionalLandforms", ShoreConfig.LANDFORMS.get());
         result.addProperty("coastalArches", ShoreConfig.ARCHES.get());

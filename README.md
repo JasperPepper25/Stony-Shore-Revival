@@ -1,24 +1,25 @@
 # Terrain rewrite development branch
 
-**0.6.0-terrain.6 composes native coastal density through Lithostitched before worldgen seeding.**
-It constructs coastal rock, local ledges and contained elevated pools, opens arch and overhang
-approaches, and retains the surface and vegetation passes. Biome placement remains unchanged.
-The supported test combination is Tectonic 3.0.17 / Terralith 2.5.4 / Lithostitched 1.4.11,
-Minecraft 1.20.1, sea level 63, without WWOO.
+**0.6.0-terrain.7 adapts coastal shaping to the original terrain.** Low shores keep
+modest relief and shallow pools; tall shores retain cliffs, supported arches and
+overhangs. Inland terrain and surface materials fade toward neighboring biomes,
+existing shallow cave air is preserved beneath the surface shell, and Quark's
+Jasper, Shale and Limestone clusters are excluded per destination in shore columns.
 
-See [installation, diagnostics and test instructions](docs/terrain-test-6.md).
-Use `/stonyshore record start` before exploring, `/stonyshore record stop` afterward,
-and `/stonyshore audit` near each formation. Format-6 reports include loaded-block measurements,
-planned terrain, water checks, climate samples, density sections, SVG maps and bounded recording
-history. Recording is optional and does not scan the whole world. Use a fresh test world;
-existing generated chunks are not repaired.
+See [installation, changes and test instructions](docs/terrain-test-7.md).
+The supported terrain combination is Tectonic 3.0.17 / Terralith 2.5.4 /
+Lithostitched 1.4.11, Minecraft 1.20.1, sea level 63, without WWOO.
+Use a fresh test world; existing generated chunks are not repaired.
 
-The original [rewrite plan](docs/terrain-rewrite.md) and older test notes are historical.
-Their runtime router replacement approach has been superseded by the native density nodes.
+Use `/stonyshore mark <label>` directly above each test formation. One
+`/stonyshore audit` exports up to 16 saved sites with profile statistics, density
+sections and loaded-block measurements. Optional `/stonyshore record start` and
+`stop` retain bounded generation history. Neither feature scans the whole world.
+Earlier test notes and the original rewrite plan are historical.
 
 ---
 
-# Historical V4 fallback — 0.4.0 behavior
+# Historical V4 fallback â€” 0.4.0 behavior
 
 A Forge 1.20.1 source project for an additive stony-shore overhaul. The GitHub Actions workflow builds an installable remapped JAR and stores it as a workflow artifact. Do not put the source ZIP into `mods`.
 

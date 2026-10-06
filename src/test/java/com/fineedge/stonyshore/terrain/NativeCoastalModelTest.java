@@ -21,7 +21,7 @@ class NativeCoastalModelTest {
         var model=new NativeCoastalModel(42,63,192,(x,y,z)->(110-y)*.15,(x,z)->true,(x,z)->false,
             (x,y,z)->{queries.incrementAndGet();return true;},new CoastalShape.Options(false,true,false,false,0));
         for(int x=0;x<16;x++)for(int z=0;z<16;z++)assertEquals(1,model.ground(x,z).mask());
-        assertTrue(queries.get()<150,"neighbor masks must reuse the same quart climate samples");
+        assertTrue(queries.get()<450,"expanded inland masks must reuse bounded quart climate samples");
     }
     @Test void respectsTheBiomeAtOriginalSurfaceAsWellAsSeaLevel() {
         var model=new NativeCoastalModel(42,63,192,(x,y,z)->(110-y)*.15,(x,z)->true,(x,z)->false,

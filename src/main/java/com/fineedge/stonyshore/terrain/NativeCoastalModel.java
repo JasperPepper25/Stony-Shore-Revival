@@ -21,7 +21,7 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
                               SurfaceShore surfaceShore,CoastalShape.Options options) {
         super(seed,sea,baseline,shore,false);this.baseline=baseline;this.shore=shore;this.ocean=ocean;
         this.surfaceShore=surfaceShore;this.sea=sea;this.maxY=maxY;
-        this.shape=new CoastalShape(seed,sea,this::ground,options);
+        this.shape=new CoastalShape(seed,sea,this::ground,options,this::originalHeight);
     }
     private int biome(int x,int z) {
         int qx=Math.floorDiv(x,4),qz=Math.floorDiv(z,4);
@@ -72,17 +72,27 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
                     double nx=Math.max(0,Math.max(bx-x,x-(bx+4))),nz=Math.max(0,Math.max(bz-z,z-(bz+4)));
                     distance=Math.min(distance,Math.hypot(nx,nz));
                 }
-                double oceanDistance=96;
+                double oceanDistance=96,inlandDistance=48;
                 int gx=Math.floorDiv(x,16)*16,gz=Math.floorDiv(z,16)*16;
                 for(int dx=-6;dx<=6;dx++)for(int dz=-6;dz<=6;dz++) {
                     int px=gx+dx*16,pz=gz+dz*16;double d=Math.hypot(px-x,pz-z);
                     if(d<oceanDistance && biome(px,pz)==2)oceanDistance=d;
                 }
-                return new CoastalShape.Ground(height,CoastalShape.smooth(distance/12),oceanDistance);
+                int bx=Math.floorDiv(x,8)*8,bz=Math.floorDiv(z,8)*8;
+                for(int dx=-6;dx<=6;dx++)for(int dz=-6;dz<=6;dz++) {
+                    int px=bx+dx*8,pz=bz+dz*8;
+                    double d=Math.hypot(Math.max(0,Math.max(px-x,x-(px+8))),Math.max(0,Math.max(pz-z,z-(pz+8))));
+                    if(d>=inlandDistance || biome(px,pz)==2)continue;
+                    if(biome(px,pz)!=1 || !surfaceBiome(px,(int)Math.round(height),pz))inlandDistance=d;
+                }
+                double width=Math.min(48,24+Math.max(0,height-sea)*.4);
+                double mask=Math.min(CoastalShape.smooth(distance/12),CoastalShape.smooth(inlandDistance/width));
+                return new CoastalShape.Ground(height,mask,oceanDistance,inlandDistance);
             } finally {planningNanos.add(System.nanoTime()-started);}
         });
     }
     public CoastalShape.Column detail(int x,int z) { return shape.column(x,z); }
+    public CoastalProfile.Sample profile(int x,int z) { return shape.profile(x,z); }
     @Override public Column column(int x,int z) {
         var c=detail(x,z);
         return new Column(c.surface(),c.mask()>0,c.sand(),c.water(),c.original());

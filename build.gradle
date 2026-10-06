@@ -53,5 +53,5 @@ tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 
 tasks.named("test") { useJUnitPlatform() }
 
-// Constructor-only Mixin: no remapped member-name targets and no refmap required.
+// Constructor and optional Quark-owned targets: no renamed Minecraft member-name strings.
 tasks.named("jar", Jar) { manifest.attributes("MixinConfigs": "stonyshorerevival.mixins.json") }

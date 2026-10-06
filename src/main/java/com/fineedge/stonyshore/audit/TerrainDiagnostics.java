@@ -15,7 +15,11 @@ final class TerrainDiagnostics {
     static Report capture(CommandSourceStack source) {
         var level=source.getLevel();var origin=BlockPos.containing(source.getPosition());
         var model=CoastalTerrainIntegration.sampler(level);var baseline=CoastalTerrainIntegration.baselineFinal(level);var random=level.getChunkSource().randomState();
-        JsonObject result=new JsonObject();result.addProperty("format",1);
+        JsonObject result=new JsonObject();result.addProperty("format",2);
+        result.addProperty("capturedUtc",java.time.Instant.now().toString());
+        result.addProperty("dimension",level.dimension().location().toString());
+        result.addProperty("centerX",origin.getX());result.addProperty("centerY",origin.getY());result.addProperty("centerZ",origin.getZ());
+        result.addProperty("horizontalRadiusBlocks",32);
         result.addProperty("note","Read-only sparse samples of loaded terrain. Original heights are coarse preliminary-density estimates. Current blocks may include later mods, structures or player edits. Landform verification checks sampled openings and roofs, not full connectivity.");
         result.add("pipeline",CoastalTerrainIntegration.status(level));
         JsonArray rows=new JsonArray(),sections=new JsonArray(),landforms=new JsonArray();
@@ -53,6 +57,12 @@ final class TerrainDiagnostics {
             row.addProperty("expectsWaterAtPlaneMinus1",intended);
             row.addProperty("waterAtExpectedLevel",intended && chunk.getBlockState(new BlockPos(x,waterPlane-1,z)).is(Blocks.WATER));
             if(planned!=null) {
+                var profile=model.profile(x,z);JsonObject context=new JsonObject();
+                context.addProperty("type",profile.type(sea));context.addProperty("medianOriginalHeight",profile.median());
+                context.addProperty("upperOriginalHeight",profile.upper());context.addProperty("localRelief",profile.relief());
+                context.addProperty("slope",profile.slope());context.addProperty("cliffWeight",profile.cliffWeight(sea));
+                context.addProperty("lowWeight",profile.lowWeight(sea));context.addProperty("inlandBoundaryDistance",model.ground(x,z).inlandDistance());
+                row.add("coastalProfile",context);
                 row.addProperty("originalHeightEstimate",planned.original());row.addProperty("plannedSurface",planned.surface());
                 row.addProperty("influence",planned.mask());row.addProperty("sandStrength",planned.sand());row.addProperty("plannedWaterPlane",waterPlane);
                 row.addProperty("plannedVersusMeasuredFloorDelta",floor-planned.surface());
@@ -96,6 +106,8 @@ final class TerrainDiagnostics {
             }
             section.addProperty("sampleFormat","[y,modifiedRawDensity,originalRawDensity,actualBlockState]");section.add("columns",points);sections.add(section);
         }
+        int active=0;for(var row:rows)if(row.getAsJsonObject().has("plannedSurface"))active++;
+        result.addProperty("activeShoreColumns",active);
         result.add("columns",rows);result.add("crossSections",sections);result.add("landformChecks",landforms);result.addProperty("skippedUnloadedColumns",skipped);
         svg.append("</svg>");return new Report(result,csv.toString(),svg.toString());
     }

@@ -6,6 +6,8 @@ import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.JsonOps;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.registries.Registries;
@@ -42,12 +44,33 @@ public final class ShoreAuditCommand {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final int ENTRY_LIMIT = 2 * 1024 * 1024;
     private static final long TOTAL_LIMIT = 64L * 1024 * 1024;
+    private static final Map<ServerLevel,AuditSiteStore<TerrainDiagnostics.Report>> SITES=Collections.synchronizedMap(new WeakHashMap<>());
     private static final Set<String> CONFIG_ROOTS = Set.of("tectonic", "terrablender", "biome_replacer",
         "biomereplacer", "biolith", "lithostitched", "fragmentum", "terralith", "terrain_slabs", "stonyshorerevival");
     private ShoreAuditCommand() {}
 
     public static void register(RegisterCommandsEvent event) {
         RecordingCommand.register(event);
+        event.getDispatcher().register(Commands.literal("stonyshore").requires(s->s.hasPermission(2))
+            .then(Commands.literal("mark").then(Commands.argument("name",StringArgumentType.word()).executes(c->{
+                String name=StringArgumentType.getString(c,"name");
+                try {
+                    if(!name.matches("[a-zA-Z0-9_-]{1,32}"))throw new IllegalArgumentException("Use 1–32 letters, numbers, hyphens or underscores.");
+                    var report=TerrainDiagnostics.capture(c.getSource());
+                    var store=SITES.computeIfAbsent(c.getSource().getLevel(),k->new AuditSiteStore<>(16));
+                    String evicted=store.put(name,report);
+                    int shore=report.json().get("activeShoreColumns").getAsInt();
+                    c.getSource().sendSuccess(()->Component.literal("Saved shore site "+name+" ("+shore+" active shore columns). Included in /stonyshore audit."
+                        +(shore==0?" No shore sampled: move directly over the formation and mark again.":"")
+                        +(evicted==null?"":" Oldest site removed: "+evicted)),false);return 1;
+                } catch(RuntimeException ex) {
+                    LOGGER.error("Shore site capture failed",ex);c.getSource().sendFailure(Component.literal("Site capture failed: "+ex.getMessage()));return 0;
+                }
+            })))
+            .then(Commands.literal("marks").then(Commands.literal("clear").executes(c->{
+                var store=SITES.get(c.getSource().getLevel());if(store!=null)store.clear();
+                c.getSource().sendSuccess(()->Component.literal("Saved shore sites cleared."),false);return 1;
+            }))));
         event.getDispatcher().register(Commands.literal("stonyshore").requires(source -> source.hasPermission(2))
             .then(Commands.literal("audit").executes(context -> {
                 context.getSource().sendSuccess(() -> Component.literal("Exporting loaded worldgen settings..."), false);
@@ -75,7 +98,7 @@ public final class ShoreAuditCommand {
         int warnings;
         try (Archive archive = new Archive(output)) {
             JsonObject info = new JsonObject();
-            info.addProperty("format", 6);
+            info.addProperty("format", 7);
             info.addProperty("createdUtc", Instant.now().toString());
             info.addProperty("scope", "Loaded registry encodings, selected packs, worldgen resource stacks, and allowlisted worldgen configs. Includes command-location X/Y/Z and a sparse nearby loaded-block sample. No player inventories, world seed or existing logs are collected. Export failures include diagnostic stack traces. Runtime mixins may make additional changes not represented here.");
             info.add("selectedPacksInRepositoryOrder", GSON.toJsonTree(server.getPackRepository().getSelectedIds()));
@@ -99,13 +122,13 @@ public final class ShoreAuditCommand {
                 var settings = server.registryAccess().registryOrThrow(Registries.NOISE_SETTINGS);
                 for (var entry : settings.entrySet())
                     archive.json("resolved/noise_settings/" + resourcePath(entry.getKey().location()),
-                        archive.encode("noise settings: " + entry.getKey().location(), NoiseGeneratorSettings.DIRECT_CODEC, entry.getValue(), ops));
+                        archive.encode("noise settings: " + entry.getKey().location(), NoiseGeneratorSettings.DIRECT_CODEC, AuditDensitySerialization.expand(entry.getValue()), ops));
             });
             archive.section("density functions", () -> {
                 var densities = server.registryAccess().registryOrThrow(Registries.DENSITY_FUNCTION);
                 for (var entry : densities.entrySet())
                     archive.json("resolved/density_functions/" + resourcePath(entry.getKey().location()),
-                        archive.encode("density function: " + entry.getKey().location(), DensityFunction.DIRECT_CODEC, entry.getValue(), ops));
+                        archive.encode("density function: " + entry.getKey().location(), DensityFunction.DIRECT_CODEC, AuditDensitySerialization.expand(entry.getValue()), ops));
             });
             archive.section("stony shore biome and features", () -> {
                 var biomes = server.registryAccess().registryOrThrow(Registries.BIOME);
@@ -157,6 +180,13 @@ public final class ShoreAuditCommand {
             archive.section("common configs", () -> configs(archive, FMLPaths.CONFIGDIR.get(), "configs/common/"));
             archive.section("world configs", () -> configs(archive, server.getWorldPath(LevelResource.ROOT).resolve("serverconfig"), "configs/world/"));
             archive.json("diagnostics/generation-recording.json",GenerationRecording.snapshot(source.getLevel()));
+            var sites=SITES.get(source.getLevel());
+            if(sites!=null)for(var site:sites.snapshot().entrySet()) {
+                String prefix="diagnostics/sites/"+site.getKey()+"/";var report=site.getValue();
+                archive.json(prefix+"terrain.json",report.json());
+                archive.bytes(prefix+"columns.csv",new ByteArrayInputStream(report.csv().getBytes(StandardCharsets.UTF_8)));
+                archive.bytes(prefix+"maps.svg",new ByteArrayInputStream(report.svg().getBytes(StandardCharsets.UTF_8)));
+            }
             archive.section("expanded terrain diagnostics", () -> {
                 var diagnostics=TerrainDiagnostics.capture(source);
                 archive.json("diagnostics/terrain.json",diagnostics.json());

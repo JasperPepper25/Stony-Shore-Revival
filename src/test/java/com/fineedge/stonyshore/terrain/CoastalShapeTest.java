@@ -14,9 +14,9 @@ class CoastalShapeTest {
         assertTrue(Math.abs(outside-justInside)<0.03,"boundary must not leave a wall at the biome gate");
         assertFalse(shape.waterCandidate(0,62,0));
     }
-    @Test void canConstructGroundInOriginalAirAndPreservesDeepCaves() {
+    @Test void preservesShallowAndDeepCaveAirBelowTheOriginalSurface() {
         var shape=shape(42,(x,z)->new CoastalShape.Ground(110,1,96),false,false);
-        assertTrue(shape.density(-0.2,20,64,20,.15)>0,"new coastal body can contain rock where the original graph was air");
+        assertEquals(-0.2,shape.density(-0.2,20,64,20,.15),1e-9);
         assertEquals(-0.2,shape.density(-0.2,20,39,20,.15),1e-9);
     }
     @Test void elevatedPoolsHaveSolidFloorsAndNoDryGapUnderTheirWater() {
@@ -60,7 +60,7 @@ class CoastalShapeTest {
         outer:for(int x=-240;x<240;x+=8)for(int z=-240;z<240;z+=8)if(shape.column(x,z).arch()!=null){a=shape.column(x,z).arch();break outer;}
         assertNotNull(a);
         assertTrue(shape.density(1,a.x(),(int)(63+a.height()*.43),a.z(),.15)<0);
-        assertTrue(shape.density(-1,a.x(),(int)Math.ceil(63+a.height()+3),a.z(),.15)>0);
+        assertTrue(shape.density(1,a.x(),(int)Math.ceil(63+a.height()+3),a.z(),.15)>0);
         for(int sign:new int[]{-1,1}) {
             int x=(int)Math.round(a.x()-sign*Math.sin(a.angle())*(a.length()+2));
             int z=(int)Math.round(a.z()+sign*Math.cos(a.angle())*(a.length()+2));
@@ -74,7 +74,7 @@ class CoastalShapeTest {
             if(shape.column(x,z).overhang()!=null){a=shape.column(x,z).overhang();break outer;}
         assertNotNull(a);
         assertTrue(shape.density(1,a.x(),a.floor()+5,a.z(),.15)<0);
-        assertTrue(shape.density(-1,a.x(),a.floor()+(int)Math.ceil(a.height())+1,a.z(),.15)>0);
+        assertTrue(shape.density(1,a.x(),a.floor()+(int)Math.ceil(a.height())+1,a.z(),.15)>0);
         for(int v=0;v<=a.reach()+8;v++) {
             int x=(int)Math.round(a.x()-Math.sin(a.angle())*v);
             int z=(int)Math.round(a.z()+Math.cos(a.angle())*v);

@@ -53,6 +53,23 @@ public final class ShoreSurfacePass {
                     any |= sandCap(world,floor,CoastalTerrainIntegration.sandCover(world.getLevel(),x,z,floor.getY()));
                 }
                 if(apronOnly) continue;
+                var model=CoastalTerrainIntegration.sampler(world.getLevel());
+                double rockWeight=model==null?1:ShoreTransition.rockWeight(model.ground(x,z).inlandDistance());
+                // Topsoil follows the adjacent inland biome and fades through broad patches.
+                if(rockWeight<1 && top>sea+6 && isSourceStone(world.getBlockState(surface))
+                    && world.getBlockState(surface.above()).isAir()
+                    && valueNoise(x+117,z-691,7)>rockWeight) {
+                    BlockState cap=ShoreTransition.inlandCap(world.getLevel(),x,top,z);
+                    if(!cap.is(Blocks.STONE)) {
+                        BlockState substrate=cap.is(Blocks.SAND)?Blocks.SANDSTONE.defaultBlockState():
+                            cap.is(Blocks.TERRACOTTA)?cap:Blocks.DIRT.defaultBlockState();
+                        // Sand must have a solid substrate; no placement across a cave opening.
+                        if(isSourceStone(world.getBlockState(surface.below())) && isSourceStone(world.getBlockState(surface.below(2)))) {
+                            world.setBlock(surface.below(2),substrate,2);world.setBlock(surface.below(),substrate,2);
+                            world.setBlock(surface,cap,2);any=true;
+                        }
+                    }
+                }
                 boolean cold = ShoreConfig.COLD.get() && isCold(world, surface);
                 boolean coast = !coastalTerrain && top >= sea && top <= sea + 8
                     && world.getBlockState(surface.above()).isAir() && nearOcean(world, surface);
@@ -84,6 +101,7 @@ public final class ShoreSurfacePass {
                     BlockState old = world.getBlockState(pos);
                     if (!isSourceStone(old)) continue;
                     if (y != top && !hasOpenSide(world, pos)) continue;
+                    if(valueNoise(x+413,z-229,7)>rockWeight)continue;
                     double grain = unit(hash(x * 11L, y * 23L, z * 11L));
                     BlockState next = palette(old, y, top, sea, band, damp, cove, tuff, grain,
                         cold, coast, overgrown, verdant, rocky, extras);
