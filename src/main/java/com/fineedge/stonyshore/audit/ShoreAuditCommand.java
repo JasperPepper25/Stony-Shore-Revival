@@ -47,6 +47,7 @@ public final class ShoreAuditCommand {
     private ShoreAuditCommand() {}
 
     public static void register(RegisterCommandsEvent event) {
+        RecordingCommand.register(event);
         event.getDispatcher().register(Commands.literal("stonyshore").requires(source -> source.hasPermission(2))
             .then(Commands.literal("audit").executes(context -> {
                 context.getSource().sendSuccess(() -> Component.literal("Exporting loaded worldgen settings..."), false);
@@ -74,7 +75,7 @@ public final class ShoreAuditCommand {
         int warnings;
         try (Archive archive = new Archive(output)) {
             JsonObject info = new JsonObject();
-            info.addProperty("format", 5);
+            info.addProperty("format", 6);
             info.addProperty("createdUtc", Instant.now().toString());
             info.addProperty("scope", "Loaded registry encodings, selected packs, worldgen resource stacks, and allowlisted worldgen configs. Includes command-location X/Y/Z and a sparse nearby loaded-block sample. No player inventories, world seed or existing logs are collected. Export failures include diagnostic stack traces. Runtime mixins may make additional changes not represented here.");
             info.add("selectedPacksInRepositoryOrder", GSON.toJsonTree(server.getPackRepository().getSelectedIds()));
@@ -155,6 +156,13 @@ public final class ShoreAuditCommand {
             archive.json("resource-index.json", index);
             archive.section("common configs", () -> configs(archive, FMLPaths.CONFIGDIR.get(), "configs/common/"));
             archive.section("world configs", () -> configs(archive, server.getWorldPath(LevelResource.ROOT).resolve("serverconfig"), "configs/world/"));
+            archive.json("diagnostics/generation-recording.json",GenerationRecording.snapshot(source.getLevel()));
+            archive.section("expanded terrain diagnostics", () -> {
+                var diagnostics=TerrainDiagnostics.capture(source);
+                archive.json("diagnostics/terrain.json",diagnostics.json());
+                archive.bytes("diagnostics/columns.csv",new ByteArrayInputStream(diagnostics.csv().getBytes(StandardCharsets.UTF_8)));
+                archive.bytes("diagnostics/maps.svg",new ByteArrayInputStream(diagnostics.svg().getBytes(StandardCharsets.UTF_8)));
+            });
             archive.section("nearby shore observations", () -> archive.json("observations/nearby-shore.json", ShoreObservations.capture(source)));
             archive.finishReport();
             warnings = archive.errors.size();
@@ -172,6 +180,7 @@ public final class ShoreAuditCommand {
             || path.startsWith("worldgen/world_preset/") || path.startsWith("worldgen/biome/")
             || path.startsWith("dimension/")
             || path.startsWith("dimension_type/") || path.startsWith("forge/biome_modifier/")
+            || path.startsWith("worldgen_modifier/") || path.startsWith("biome_injector/")
             || path.startsWith("forge/structure_modifier/") || path.startsWith("tags/worldgen/"));
     }
 

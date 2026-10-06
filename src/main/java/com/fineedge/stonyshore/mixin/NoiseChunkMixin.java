@@ -17,6 +17,7 @@ public abstract class NoiseChunkMixin {
     private void stonyshore$attachWater(int cellCount, RandomState random, int x, int z,
         NoiseSettings noise, DensityFunctions.BeardifierOrMarker beard, NoiseGeneratorSettings settings,
         Aquifer.FluidPicker fluids, Blender blender, CallbackInfo ci) {
+        com.fineedge.stonyshore.audit.GenerationRecording.noiseStarted(random,x,z);
         CoastalTerrainIntegration.attachAquifer((NoiseChunk) (Object) this, random, blender, fluids);
     }
 }

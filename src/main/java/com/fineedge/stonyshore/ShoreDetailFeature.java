@@ -17,6 +17,9 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
 
     @Override
     public boolean place(FeaturePlaceContext<NoneFeatureConfiguration> ctx) {
+        boolean recording=com.fineedge.stonyshore.audit.GenerationRecording.active(ctx.level().getLevel());
+        long started=recording?System.nanoTime():0;
+        try {
         ChunkPos chunk = new ChunkPos(ctx.origin());
         boolean changed = ShoreSurfacePass.apply(ctx.level(), chunk);
         changed |= ShoreDecorationPass.apply(ctx.level(), chunk);
@@ -25,5 +28,9 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
             changed |= ShoreSpirePass.apply(ctx.level(), chunk);
         }
         return changed;
+        } finally {
+            if(recording)com.fineedge.stonyshore.audit.GenerationRecording.feature(ctx.level().getLevel(),new ChunkPos(ctx.origin()),System.nanoTime()-started);
+        }
+
     }
 }

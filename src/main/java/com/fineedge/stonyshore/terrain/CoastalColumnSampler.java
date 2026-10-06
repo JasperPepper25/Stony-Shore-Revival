@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.LongAdder;
 
 /** Pure, bounded planning against the original seeded terrain, with per-worker caches. */
-public final class CoastalColumnSampler {
+public class CoastalColumnSampler {
     @FunctionalInterface public interface Terrain { double density(int x, int y, int z); }
     @FunctionalInterface public interface Shore { boolean contains(int x, int z); }
     @FunctionalInterface public interface SurfaceShore { boolean contains(int x,int y,int z); }

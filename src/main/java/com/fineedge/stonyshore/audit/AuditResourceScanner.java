@@ -11,7 +11,7 @@ final class AuditResourceScanner {
     private static final List<String> ROOTS = List.of(
         "worldgen/density_function", "worldgen/noise_settings", "worldgen/noise",
         "worldgen/world_preset", "worldgen/biome", "dimension", "dimension_type",
-        "forge/biome_modifier", "forge/structure_modifier", "tags/worldgen");
+        "forge/biome_modifier", "forge/structure_modifier", "worldgen_modifier", "biome_injector", "tags/worldgen");
     private AuditResourceScanner() {}
 
     static <K, V> Map<K, V> collect(Function<String, Map<K, V>> query,

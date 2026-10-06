@@ -8,6 +8,7 @@ public final class ShoreConfig {
     public static final ForgeConfigSpec SPEC;
     public static final ForgeConfigSpec.BooleanValue COASTAL_TERRAIN;
     public static final ForgeConfigSpec.BooleanValue SANDY_SHELVES;
+    public static final ForgeConfigSpec.DoubleValue BEACH_FREQUENCY;
     public static final ForgeConfigSpec.BooleanValue LANDFORMS;
     public static final ForgeConfigSpec.BooleanValue ARCHES;
     public static final ForgeConfigSpec.BooleanValue POOLS;
@@ -23,11 +24,13 @@ public final class ShoreConfig {
         b.comment("Generation happens only in new chunks. These settings belong on the server.").push("generation");
         STONE_CHANCE = b.comment("Chance to texture a naturally exposed stone face; 0 keeps original stone.")
             .defineInRange("stone_replacement_chance", 0.42, 0.0, 1.0);
-        COASTAL_TERRAIN = b.comment("Experimental low-coast noise shaping for the audited Tectonic/Terralith pack. Restart required. Suspends legacy pools and spires when installed.")
+        COASTAL_TERRAIN = b.comment("Native coastal density composition for the audited Tectonic/Terralith pack. Restart required. Suspends legacy pools and spires when installed.")
             .define("coastal_terrain", true);
         SANDY_SHELVES = b.comment("Occasional broad low sand shelves within coastal terrain shaping. Restart required.")
             .define("coastal_sandy_shelves", true);
-        LANDFORMS = b.comment("Experimental stepped upper shores, contained elevated pools, and cliff-foot beaches. Restart required.")
+        BEACH_FREQUENCY = b.comment("Broad beach field coverage, independent of biome rarity. Restart required.")
+            .defineInRange("coastal_beach_frequency",0.65,0.0,1.0);
+        LANDFORMS = b.comment("Local upper shore ledges, contained elevated pools, and cliff-foot beaches. Restart required.")
             .define("coastal_landforms", true);
         ARCHES = b.comment("Occasional carved arches in suitable shore headlands. Requires coastal_landforms; restart required.")
             .define("coastal_arches", true);

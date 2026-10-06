@@ -10,6 +10,11 @@ import net.minecraft.world.level.levelgen.feature.configurations.NoneFeatureConf
 public final class ShoreApronFeature extends Feature<NoneFeatureConfiguration> {
     public ShoreApronFeature(Codec<NoneFeatureConfiguration> codec) { super(codec); }
     public boolean place(FeaturePlaceContext<NoneFeatureConfiguration> ctx) {
-        return ShoreSurfacePass.apply(ctx.level(),new ChunkPos(ctx.origin()),true);
+        boolean recording=com.fineedge.stonyshore.audit.GenerationRecording.active(ctx.level().getLevel());
+        long started=recording?System.nanoTime():0;
+        try { return ShoreSurfacePass.apply(ctx.level(),new ChunkPos(ctx.origin()),true); }
+        finally {
+            if(recording)com.fineedge.stonyshore.audit.GenerationRecording.feature(ctx.level().getLevel(),new ChunkPos(ctx.origin()),System.nanoTime()-started);
+        }
     }
 }
