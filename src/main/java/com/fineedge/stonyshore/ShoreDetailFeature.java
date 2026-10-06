@@ -20,14 +20,14 @@ public final class ShoreDetailFeature extends Feature<NoneFeatureConfiguration> 
         boolean recording=com.fineedge.stonyshore.audit.GenerationRecording.active(ctx.level().getLevel());
         long started=recording?System.nanoTime():0;
         try {
-        ChunkPos chunk = new ChunkPos(ctx.origin());
-        boolean changed = ShoreSurfacePass.apply(ctx.level(), chunk);
-        changed |= ShoreDecorationPass.apply(ctx.level(), chunk);
-        if (!CoastalTerrainIntegration.installed(ctx.level().getLevel())) {
-            changed |= LegacyPoolPass.apply(ctx.level(), chunk);
-            changed |= ShoreSpirePass.apply(ctx.level(), chunk);
-        }
-        return changed;
+            ChunkPos chunk = new ChunkPos(ctx.origin());
+            boolean changed = ShoreSurfacePass.apply(ctx.level(), chunk);
+            changed |= ShoreDecorationPass.apply(ctx.level(), chunk);
+            if (!CoastalTerrainIntegration.installed(ctx.level().getLevel())) {
+                changed |= LegacyPoolPass.apply(ctx.level(), chunk);
+                changed |= ShoreSpirePass.apply(ctx.level(), chunk);
+            }
+            return changed;
         } finally {
             if(recording)com.fineedge.stonyshore.audit.GenerationRecording.feature(ctx.level().getLevel(),new ChunkPos(ctx.origin()),System.nanoTime()-started);
         }

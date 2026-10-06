@@ -20,7 +20,7 @@ final class TerrainDiagnostics {
         result.add("pipeline",CoastalTerrainIntegration.status(level));
         JsonArray rows=new JsonArray(),sections=new JsonArray(),landforms=new JsonArray();
         Set<String> seen=new HashSet<>();int skipped=0;
-        StringBuilder csv=new StringBuilder("x,z,biome_at_65,surface_biome,original_height_estimate,planned_height,influence,sand,water_plane,actual_floor,actual_water_top,pool_depth,excavation_to_floor\n");
+        StringBuilder csv=new StringBuilder("x,z,biome_at_65,surface_biome,original_height_estimate,planned_height,influence,sand_strength,material_sand_cover,water_plane,actual_floor,actual_water_top,pool_depth,excavation_to_floor\n");
         StringBuilder svg=new StringBuilder("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"720\" height=\"760\" viewBox=\"0 0 720 760\"><rect width=\"720\" height=\"760\" fill=\"#18222b\"/><g font-family=\"sans-serif\" font-size=\"15\" fill=\"white\"><text x=\"20\" y=\"25\">Planned elevation</text><text x=\"375\" y=\"25\">Measured ground elevation</text><text x=\"20\" y=\"390\">Coastal influence</text><text x=\"375\" y=\"390\">Sand coverage</text><text x=\"20\" y=\"750\">Hover a cell for coordinates. Gray cells were not loaded.</text></g>");
         int sea=level.getSeaLevel();
         for(int ix=0;ix<17;ix++)for(int iz=0;iz<17;iz++) {
@@ -31,12 +31,14 @@ final class TerrainDiagnostics {
             int top=chunk.getHeight(Heightmap.Types.WORLD_SURFACE,x&15,z&15)-1;
             var planned=model==null?null:model.detail(x,z);
             if(planned!=null && planned.mask()==0)planned=null;
+            double sandCover=model==null?0:model.sandCover(x,z,floor);
             JsonObject row=new JsonObject();row.addProperty("x",x);row.addProperty("z",z);
             row.addProperty("measuredFloorY",floor);row.addProperty("worldSurfaceY",top);
             String biome=chunk.getNoiseBiome(QuartPos.fromBlock(x),QuartPos.fromBlock(65),QuartPos.fromBlock(z))
                 .unwrapKey().map(k->k.location().toString()).orElse("unregistered");
             String surfaceBiome=chunk.getNoiseBiome(QuartPos.fromBlock(x),QuartPos.fromBlock(floor),QuartPos.fromBlock(z))
                 .unwrapKey().map(k->k.location().toString()).orElse("unregistered");
+            row.addProperty("materialSandCoverAtMeasuredFloor",sandCover);
             row.addProperty("biomeAt65",biome);row.addProperty("biomeAtMeasuredFloor",surfaceBiome);
             var climate=random.sampler().sample(QuartPos.fromBlock(x),QuartPos.fromBlock(floor),QuartPos.fromBlock(z));
             JsonObject values=new JsonObject();values.addProperty("temperature",climate.temperature()/10000.0);
@@ -64,13 +66,13 @@ final class TerrainDiagnostics {
             rows.add(row);
             csv.append(x).append(',').append(z).append(',').append(biome).append(',').append(surfaceBiome).append(',')
                 .append(planned==null?"":planned.original()).append(',').append(planned==null?"":planned.surface()).append(',')
-                .append(planned==null?0:planned.mask()).append(',').append(planned==null?0:planned.sand()).append(',').append(waterPlane).append(',')
+                .append(planned==null?0:planned.mask()).append(',').append(planned==null?0:planned.sand()).append(',').append(sandCover).append(',').append(waterPlane).append(',')
                 .append(floor).append(',').append(waterTop==Integer.MIN_VALUE?"":waterTop).append(',')
                 .append(planned==null||planned.pool()==null?"":waterPlane-1-floor).append(',').append(planned==null?"":planned.original()-floor).append('\n');
             cell(svg,0,ix,iz,color(planned==null?floor:planned.surface(),sea),x,z,planned==null?floor:planned.surface());
             cell(svg,1,ix,iz,color(floor,sea),x,z,floor);
             cell(svg,2,ix,iz,gray(planned==null?0:planned.mask()),x,z,planned==null?0:planned.mask());
-            cell(svg,3,ix,iz,gray(planned==null?0:planned.sand()),x,z,planned==null?0:planned.sand());
+            cell(svg,3,ix,iz,gray(sandCover),x,z,sandCover);
         }
         // Two full vertical slices. Actual and predicted solid/air can be compared at each point.
         for(int axis=0;axis<2;axis++) {

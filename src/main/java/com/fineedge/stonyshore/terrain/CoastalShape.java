@@ -85,6 +85,14 @@ public final class CoastalShape {
                 if(r.overhang!=null && r.overhang.reserve(x,z)>0) {
                     overhang=r.overhang;double amount=overhang.reserve(x,z);
                     surface+=amount*(Math.max(surface,overhang.floor()+overhang.height()+3)-surface);
+                    double ox=x-overhang.x(),oz=z-overhang.z();
+                    double u=ox*Math.cos(overhang.angle())+oz*Math.sin(overhang.angle());
+                    double v=-ox*Math.sin(overhang.angle())+oz*Math.cos(overhang.angle());
+                    // Lower the descending approach beyond the roof to open the recess to air.
+                    double mouth=(1-smooth((Math.abs(u)-overhang.width()*0.6)/(overhang.width()*0.5)))
+                        *smooth((v-overhang.reach()*0.45)/(overhang.reach()*0.3))
+                        *(1-smooth((v-(overhang.reach()+5))/8));
+                    surface+=mouth*(Math.min(surface,overhang.floor()+1)-surface);
                 }
             }
         }
@@ -135,7 +143,8 @@ public final class CoastalShape {
                 Ground outer=ground.sample(ox,oz);
                 int floor=(int)Math.floor(baseSurface(ox,oz,outer)-4);
                 if(outer.mask>0.92 && floor>sea+2 && arch==null && shelf==null) {
-                    overhang=new CoastalLandforms.Overhang(ox,oz,angle,9,16,13,floor);count("overhangsAccepted");
+                    overhang=new CoastalLandforms.Overhang(ox,oz,angle,7+6*noise.value(cx,cz,1202),
+                        11+10*noise.value(cx,cz,1203),8+10*noise.value(cx,cz,1204),floor);count("overhangsAccepted");
                 } else count("overhangsRejectedSupportOrOverlap");
             } else count("overhangsRejectedSlope");
         }

@@ -41,7 +41,7 @@ class CoastalShapeTest {
     @Test void orderAndCacheEvictionDoNotChangeTerrain() {
         var ground=(CoastalShape.GroundSampler)(x,z)->new CoastalShape.Ground(110+x*.06,1,24);
         var a=shape(99,ground,true,true);var b=shape(99,ground,true,true);
-        for(int x=160;x>=-160;x-=8)for(int z=160;z>=-160;z-=8)b.column(x,z);
+        for(int x=768;x>=-768;x-=8)for(int z=768;z>=-768;z-=8)b.column(x,z);
         for(int x=-160;x<=160;x+=8)for(int z=-160;z<=160;z+=8)
             assertEquals(a.density(0.1,x,78,z,.15),b.density(0.1,x,78,z,.15),1e-9);
     }
@@ -56,6 +56,20 @@ class CoastalShapeTest {
             int x=(int)Math.round(a.x()-sign*Math.sin(a.angle())*(a.length()+2));
             int z=(int)Math.round(a.z()+sign*Math.cos(a.angle())*(a.length()+2));
             assertTrue(shape.density(1,x,(int)(63+a.height()*.43),z,.15)<0,"arch portal must lead to exterior air");
+        }
+    }
+    @Test void overhangsRetainRoofsAndOpenToTheDescendingExterior() {
+        var shape=shape(123,(x,z)->new CoastalShape.Ground(180+x*0.25,1,24),false,false);
+        CoastalLandforms.Overhang a=null;
+        outer:for(int x=-240;x<240;x+=8)for(int z=-240;z<240;z+=8)
+            if(shape.column(x,z).overhang()!=null){a=shape.column(x,z).overhang();break outer;}
+        assertNotNull(a);
+        assertTrue(shape.density(1,a.x(),a.floor()+5,a.z(),.15)<0);
+        assertTrue(shape.density(-1,a.x(),a.floor()+(int)Math.ceil(a.height())+1,a.z(),.15)>0);
+        for(int v=0;v<=a.reach()+8;v++) {
+            int x=(int)Math.round(a.x()-Math.sin(a.angle())*v);
+            int z=(int)Math.round(a.z()+Math.cos(a.angle())*v);
+            assertTrue(shape.density(1,x,a.floor()+5,z,.15)<0,"recess must connect to exterior air");
         }
     }
     @Test void sharedCacheRemainsBoundedAndDoesNotHoldTheFactoryMonitor() {
