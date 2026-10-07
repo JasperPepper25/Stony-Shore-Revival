@@ -11,8 +11,8 @@ final class AuditDensitySerialization {
     }
     static NoiseGeneratorSettings expand(NoiseGeneratorSettings settings) {
         var r=settings.noiseRouter();
-        var router=new NoiseRouter(expand(r.barrier()),expand(r.fluidLevelFloodedness()),expand(r.fluidLevelSpread()),
-            expand(r.lava()),expand(r.temperature()),expand(r.vegetation()),expand(r.continents()),expand(r.erosion()),
+        var router=new NoiseRouter(expand(r.barrierNoise()),expand(r.fluidLevelFloodednessNoise()),expand(r.fluidLevelSpreadNoise()),
+            expand(r.lavaNoise()),expand(r.temperature()),expand(r.vegetation()),expand(r.continents()),expand(r.erosion()),
             expand(r.depth()),expand(r.ridges()),expand(r.initialDensityWithoutJaggedness()),expand(r.finalDensity()),
             expand(r.veinToggle()),expand(r.veinRidged()),expand(r.veinGap()));
         return new NoiseGeneratorSettings(settings.noiseSettings(),settings.defaultBlock(),settings.defaultFluid(),
@@ -20,3 +20,4 @@ final class AuditDensitySerialization {
             settings.aquifersEnabled(),settings.oreVeinsEnabled(),settings.useLegacyRandomSource());
     }
 }
+
