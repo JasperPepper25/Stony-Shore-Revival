@@ -1,20 +1,24 @@
 # Terrain rewrite development branch
 
-**0.6.0-terrain.7 adapts coastal shaping to the original terrain.** Low shores keep
-modest relief and shallow pools; tall shores retain cliffs, supported arches and
-overhangs. Inland terrain and surface materials fade toward neighboring biomes,
-existing shallow cave air is preserved beneath the surface shell, and Quark's
-Jasper, Shale and Limestone clusters are excluded per destination in shore columns.
+**0.6.0-terrain.8 reconstructs smoother coastal slopes and restores feature opportunities.**
+Surface-climate classification avoids cave-biome gaps at shorelines. Smaller
+supported arches and varied contained pools can fit transition areas, while
+selected sand benches lower the foot of tall cliffs. The inland blend and
+preservation of shallow cave air are retained.
 
-See [installation, changes and test instructions](docs/terrain-test-7.md).
-The supported terrain combination is Tectonic 3.0.17 / Terralith 2.5.4 /
+See [installation, changes and test instructions](docs/terrain-test-8.md).
+The supported terrain stack is Tectonic 3.0.17 / Terralith 2.5.4 /
 Lithostitched 1.4.11, Minecraft 1.20.1, sea level 63, without WWOO.
 Use a fresh test world; existing generated chunks are not repaired.
 
-Use `/stonyshore mark <label>` directly above each test formation. One
-`/stonyshore audit` exports up to 16 saved sites with profile statistics, density
-sections and loaded-block measurements. Optional `/stonyshore record start` and
-`stop` retain bounded generation history. Neither feature scans the whole world.
+Use `/stonyshore mark <label>` directly above each test formation. Repeated labels
+receive suffixes instead of replacing earlier captures. One `/stonyshore audit`
+exports up to 16 saved sites with profiles, density sections and loaded-block
+measurements of openings, roofs and pool water. Optional `/stonyshore record start`
+and `stop` retain bounded generation history. Neither feature scans the world.
+
+Automated geometry checks do not establish customized-pack appearance or feature
+frequency. The next in-game pass should compare fresh chunks with matching seeds.
 Earlier test notes and the original rewrite plan are historical.
 
 ---

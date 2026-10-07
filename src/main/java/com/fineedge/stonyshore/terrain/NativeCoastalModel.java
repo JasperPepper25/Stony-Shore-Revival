@@ -8,28 +8,31 @@ import java.util.concurrent.atomic.LongAdder;
 public final class NativeCoastalModel extends CoastalColumnSampler {
     private final Terrain baseline;
     private final Shore shore,ocean;
-    private final SurfaceShore surfaceShore;
+    private record Boundary(double ocean,double inland) {}
+    private final BoundedCache<Long,Boundary> boundaries=new BoundedCache<>(4096);
     private final int sea,maxY;
     private final CoastalShape shape;
     private final BoundedCache<Long,Double> heights=new BoundedCache<>(4096);
     private final BoundedCache<Long,Integer> biomes=new BoundedCache<>(16384);
-    private record SurfaceKey(int x,int y,int z) {}
-    private final BoundedCache<SurfaceKey,Boolean> surfaceBiomes=new BoundedCache<>(16384);
     private final BoundedCache<Long,CoastalShape.Ground> grounds=new BoundedCache<>(8192);
     private final LongAdder probes=new LongAdder(),planningNanos=new LongAdder(),water=new LongAdder(),aquifers=new LongAdder();
     public NativeCoastalModel(long seed,int sea,int maxY,Terrain baseline,Shore shore,Shore ocean,
                               SurfaceShore surfaceShore,CoastalShape.Options options) {
+        this(seed,sea,maxY,baseline,shore,ocean,surfaceShore,options,baseline);
+    }
+    public NativeCoastalModel(long seed,int sea,int maxY,Terrain baseline,Shore shore,Shore ocean,
+                              SurfaceShore surfaceShore,CoastalShape.Options options,Terrain rock) {
         super(seed,sea,baseline,shore,false);this.baseline=baseline;this.shore=shore;this.ocean=ocean;
-        this.surfaceShore=surfaceShore;this.sea=sea;this.maxY=maxY;
-        this.shape=new CoastalShape(seed,sea,this::ground,options,this::originalHeight);
+        this.sea=sea;this.maxY=maxY;
+        this.shape=new CoastalShape(seed,sea,this::ground,options,this::originalHeight,(x,y,z)->{
+            probes.increment();double density=rock.density(x,y,z);
+            if(!Double.isFinite(density))throw new IllegalStateException("Non-finite support density");
+            return density>0;
+        });
     }
     private int biome(int x,int z) {
         int qx=Math.floorDiv(x,4),qz=Math.floorDiv(z,4);
         return biomes.get(CoastalShape.key(qx,qz),k->shore.contains(qx*4,qz*4)?1:ocean.contains(qx*4,qz*4)?2:0);
-    }
-    private boolean surfaceBiome(int x,int y,int z) {
-        var key=new SurfaceKey(Math.floorDiv(x,4),Math.floorDiv(y,4),Math.floorDiv(z,4));
-        return surfaceBiomes.get(key,k->surfaceShore.contains(k.x()*4,k.y()*4,k.z()*4));
     }
     private double probe(int x,int y,int z) {
         probes.increment();double value=baseline.density(x,y,z);
@@ -52,42 +55,55 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
     }
     public double originalHeight(int x,int z) {
         int gx=Math.floorDiv(x,16)*16,gz=Math.floorDiv(z,16)*16;
-        double fx=CoastalShape.smooth(Math.floorMod(x,16)/16.0),fz=CoastalShape.smooth(Math.floorMod(z,16)/16.0);
-        double a=heightNode(gx,gz),b=heightNode(gx+16,gz),c=heightNode(gx,gz+16),d=heightNode(gx+16,gz+16);
-        return (a+(b-a)*fx)*(1-fz)+(c+(d-c)*fx)*fz;
+        double fx=Math.floorMod(x,16)/16.0,fz=Math.floorMod(z,16)/16.0;
+        double[] rows=new double[4];
+        for(int i=0;i<4;i++) {
+            int nz=gz+(i-1)*16;
+            rows[i]=CoastalInterpolation.cubic(heightNode(gx-16,nz),heightNode(gx,nz),
+                heightNode(gx+16,nz),heightNode(gx+32,nz),fx);
+        }
+        return CoastalInterpolation.cubic(rows[0],rows[1],rows[2],rows[3],fz);
+    }
+    /** Predicates describe surface climate, not the biome in a cave at sea level. */
+    public boolean shoreColumn(int x,int z) { return biome(x,z)==1; }
+    private Boundary boundaryNode(int x,int z) {
+        return boundaries.get(CoastalShape.key(x,z),k->{
+            int here=biome(x,z);double oceanDistance=96,inlandDistance=48,shoreDistance=96;
+            // Cached eight-block distance nodes replace a full scan for every solid/air query.
+            for(int dx=-12;dx<=12;dx++)for(int dz=-12;dz<=12;dz++) {
+                int px=x+dx*8,pz=z+dz*8;
+                double distance=Math.hypot(Math.max(0,Math.abs(px-x)-4),Math.max(0,Math.abs(pz-z)-4));
+                if(distance>=96)continue;
+                int type=biome(px,pz);
+                if(type==2)oceanDistance=Math.min(oceanDistance,distance);
+                if(type==0)inlandDistance=Math.min(inlandDistance,distance);
+                if(type==1)shoreDistance=Math.min(shoreDistance,distance);
+            }
+            return new Boundary(here==2?-shoreDistance:oceanDistance,inlandDistance);
+        });
+    }
+    private Boundary boundary(int x,int z) {
+        int gx=Math.floorDiv(x,8)*8,gz=Math.floorDiv(z,8)*8;
+        double fx=Math.floorMod(x,8)/8.0,fz=Math.floorMod(z,8)/8.0;
+        Boundary a=boundaryNode(gx,gz),b=boundaryNode(gx+8,gz),c=boundaryNode(gx,gz+8),d=boundaryNode(gx+8,gz+8);
+        return new Boundary(lerp(a.ocean,b.ocean,c.ocean,d.ocean,fx,fz),
+            lerp(a.inland,b.inland,c.inland,d.inland,fx,fz));
+    }
+    private static double lerp(double a,double b,double c,double d,double x,double z) {
+        return (a+(b-a)*x)*(1-z)+(c+(d-c)*x)*z;
     }
     public CoastalShape.Ground ground(int x,int z) {
         return grounds.get(CoastalShape.key(x,z),k->{
             long started=System.nanoTime();
             try {
-                if(biome(x,z)!=1)return new CoastalShape.Ground(sea,0,96);
-                double height=originalHeight(x,z);
-                if(!surfaceBiome(x,(int)Math.round(height),z))
-                    return new CoastalShape.Ground(height,0,96);
-                int qx=Math.floorDiv(x,4),qz=Math.floorDiv(z,4);double distance=12;
-                for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++) {
-                    int bx=(qx+dx)*4,bz=(qz+dz)*4;
-                    // Ocean is a true boundary too. Reach zero before the exact-biome gate.
-                    if(biome(bx,bz)==1 && surfaceBiome(bx,(int)Math.round(height),bz))continue;
-                    double nx=Math.max(0,Math.max(bx-x,x-(bx+4))),nz=Math.max(0,Math.max(bz-z,z-(bz+4)));
-                    distance=Math.min(distance,Math.hypot(nx,nz));
-                }
-                double oceanDistance=96,inlandDistance=48;
-                int gx=Math.floorDiv(x,16)*16,gz=Math.floorDiv(z,16)*16;
-                for(int dx=-6;dx<=6;dx++)for(int dz=-6;dz<=6;dz++) {
-                    int px=gx+dx*16,pz=gz+dz*16;double d=Math.hypot(px-x,pz-z);
-                    if(d<oceanDistance && biome(px,pz)==2)oceanDistance=d;
-                }
-                int bx=Math.floorDiv(x,8)*8,bz=Math.floorDiv(z,8)*8;
-                for(int dx=-6;dx<=6;dx++)for(int dz=-6;dz<=6;dz++) {
-                    int px=bx+dx*8,pz=bz+dz*8;
-                    double d=Math.hypot(Math.max(0,Math.max(px-x,x-(px+8))),Math.max(0,Math.max(pz-z,z-(pz+8))));
-                    if(d>=inlandDistance || biome(px,pz)==2)continue;
-                    if(biome(px,pz)!=1 || !surfaceBiome(px,(int)Math.round(height),pz))inlandDistance=d;
-                }
+                int type=biome(x,z);double height=originalHeight(x,z);
+                if(type==0)return new CoastalShape.Ground(height,0,96,0);
+                Boundary b=boundary(x,z);
                 double width=Math.min(48,24+Math.max(0,height-sea)*.4);
-                double mask=Math.min(CoastalShape.smooth(distance/12),CoastalShape.smooth(inlandDistance/width));
-                return new CoastalShape.Ground(height,mask,oceanDistance,inlandDistance);
+                // Coastal geometry reaches a bounded ocean apron; inland fades are retained.
+                double oceanMask=CoastalShape.smooth((b.ocean+16)/28);
+                double mask=Math.min(oceanMask,CoastalShape.smooth(b.inland/width));
+                return new CoastalShape.Ground(height,mask,Math.max(0,b.ocean),b.inland);
             } finally {planningNanos.add(System.nanoTime()-started);}
         });
     }
@@ -98,14 +114,16 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
         return new Column(c.surface(),c.mask()>0,c.sand(),c.water(),c.original());
     }
     @Override public double cap(double original,int x,int y,int z,double scale) {
-        if(y<sea-24 || y>=maxY || biome(x,z)!=1)return original;
+        if(y<sea-24 || y>=maxY)return original;
+        int type=biome(x,z);
+        if(type==0 || (type==2 && boundary(x,z).ocean<=-16))return original;
         return shape.density(original,x,y,z,scale);
     }
     @Override public boolean waterCandidate(int x,int y,int z) {
-        return y>=sea-3 && y<maxY && biome(x,z)==1 && shape.waterCandidate(x,y,z);
+        return y>=sea-3 && y<maxY && shape.waterCandidate(x,y,z);
     }
-    @Override public CoastalLandforms.Arch arch(int x,int z) { return biome(x,z)==1?detail(x,z).arch():null; }
-    @Override public CoastalLandforms.Overhang overhang(int x,int z) { return biome(x,z)==1?detail(x,z).overhang():null; }
+    @Override public CoastalLandforms.Arch arch(int x,int z) { return detail(x,z).arch(); }
+    @Override public CoastalLandforms.Overhang overhang(int x,int z) { return detail(x,z).overhang(); }
     @Override public double beachField(int x,int z) { return shape.beachField(x,z); }
     @Override public double sandCover(int x,int z,int floor) {
         if(floor<sea-24 || floor>sea+6)return 0;
@@ -131,7 +149,7 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
         var s=new TreeMap<>(shape.stats());s.put("baselineDensityProbes",probes.sum());
         s.put("heightCacheHits",heights.hits());s.put("heightCacheMisses",heights.misses());
         s.put("groundCacheHits",grounds.hits());s.put("groundCacheMisses",grounds.misses());
-        s.put("surfaceBiomeCacheHits",surfaceBiomes.hits());s.put("surfaceBiomeCacheMisses",surfaceBiomes.misses());
+        s.put("coastDistanceCacheHits",boundaries.hits());s.put("coastDistanceCacheMisses",boundaries.misses());
         s.put("groundPlanningNanos",planningNanos.sum());return s;
     }
 }

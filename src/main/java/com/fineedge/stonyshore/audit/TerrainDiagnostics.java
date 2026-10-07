@@ -15,12 +15,12 @@ final class TerrainDiagnostics {
     static Report capture(CommandSourceStack source) {
         var level=source.getLevel();var origin=BlockPos.containing(source.getPosition());
         var model=CoastalTerrainIntegration.sampler(level);var baseline=CoastalTerrainIntegration.baselineFinal(level);var random=level.getChunkSource().randomState();
-        JsonObject result=new JsonObject();result.addProperty("format",2);
+        JsonObject result=new JsonObject();result.addProperty("format",3);
         result.addProperty("capturedUtc",java.time.Instant.now().toString());
         result.addProperty("dimension",level.dimension().location().toString());
         result.addProperty("centerX",origin.getX());result.addProperty("centerY",origin.getY());result.addProperty("centerZ",origin.getZ());
         result.addProperty("horizontalRadiusBlocks",32);
-        result.addProperty("note","Read-only sparse samples of loaded terrain. Original heights are coarse preliminary-density estimates. Current blocks may include later mods, structures or player edits. Landform verification checks sampled openings and roofs, not full connectivity.");
+        result.addProperty("note","Read-only samples of loaded terrain. Original heights are preliminary-density estimates. Current blocks may include later mods, structures or player edits. Opening transects and pool footprint measurements are samples, not proof of complete three-dimensional connectivity.");
         result.add("pipeline",CoastalTerrainIntegration.status(level));
         JsonArray rows=new JsonArray(),sections=new JsonArray(),landforms=new JsonArray();
         Set<String> seen=new HashSet<>();int skipped=0;
@@ -44,6 +44,7 @@ final class TerrainDiagnostics {
                 .unwrapKey().map(k->k.location().toString()).orElse("unregistered");
             row.addProperty("materialSandCoverAtMeasuredFloor",sandCover);
             row.addProperty("biomeAt65",biome);row.addProperty("biomeAtMeasuredFloor",surfaceBiome);
+            row.addProperty("surfaceClimateShoreColumn",model!=null && model.shoreColumn(x,z));
             var climate=random.sampler().sample(QuartPos.fromBlock(x),QuartPos.fromBlock(floor),QuartPos.fromBlock(z));
             JsonObject values=new JsonObject();values.addProperty("temperature",climate.temperature()/10000.0);
             values.addProperty("humidity",climate.humidity()/10000.0);values.addProperty("continentalness",climate.continentalness()/10000.0);
@@ -65,12 +66,16 @@ final class TerrainDiagnostics {
                 row.add("coastalProfile",context);
                 row.addProperty("originalHeightEstimate",planned.original());row.addProperty("plannedSurface",planned.surface());
                 row.addProperty("influence",planned.mask());row.addProperty("sandStrength",planned.sand());row.addProperty("plannedWaterPlane",waterPlane);
+                row.addProperty("featureInfluence",planned.featureInfluence());
+                row.addProperty("oceanBoundaryDistance",model.ground(x,z).oceanDistance());
                 row.addProperty("plannedVersusMeasuredFloorDelta",floor-planned.surface());
                 row.addProperty("rawDensityAtPlannedWaterLevel",random.router().finalDensity()
                     .compute(new DensityFunction.SinglePointContext(x,waterPlane-1,z)));
                 row.addProperty("blockAtPlannedWaterLevel",chunk.getBlockState(new BlockPos(x,waterPlane-1,z)).toString());
                 row.addProperty("excavationFromOriginalEstimateToFloor",planned.original()-floor);
                 if(planned.pool()!=null) {row.addProperty("poolDepthBelowWaterPlane",waterPlane-1-floor);row.addProperty("plannedPoolDepth",planned.pool().depth());}
+                if(planned.pool()!=null && seen.add("pool:"+planned.pool().x()+":"+planned.pool().z()))
+                    landforms.add(poolCheck(source,model,planned.pool()));
                 if(planned.arch()!=null && seen.add("arch:"+planned.arch().x()+":"+planned.arch().z()))
                     landforms.add(archCheck(source,planned.arch()));
                 if(planned.overhang()!=null && seen.add("overhang:"+planned.overhang().x()+":"+planned.overhang().z()))
@@ -118,12 +123,36 @@ final class TerrainDiagnostics {
         j.add("roof",block(source,a.x(),(int)Math.ceil(a.sea()+a.height()+3),a.z()));
         for(int sign:new int[]{-1,1})j.add(sign<0?"portalA":"portalB",block(source,
             (int)Math.round(a.x()-sign*Math.sin(a.angle())*(a.length()+2)),(int)(a.sea()+a.height()*0.43),
-            (int)Math.round(a.z()+sign*Math.cos(a.angle())*(a.length()+2))));return j;
+            (int)Math.round(a.z()+sign*Math.cos(a.angle())*(a.length()+2))));
+        j.add("openingTransect",transect(source,a.x(),a.z(),a.angle(),(int)(a.sea()+a.height()*.43),-a.length()-3,a.length()+3));return j;
     }
     private static JsonObject overhangCheck(CommandSourceStack source,CoastalLandforms.Overhang a) {
         JsonObject j=new JsonObject();j.addProperty("type","overhang");j.addProperty("centerX",a.x());j.addProperty("centerZ",a.z());
         j.addProperty("floorY",a.floor());j.addProperty("height",a.height());j.add("openingCenter",block(source,a.x(),a.floor()+5,a.z()));
-        j.add("roof",block(source,a.x(),a.floor()+(int)a.height()+1,a.z()));return j;
+        j.add("roof",block(source,a.x(),a.floor()+(int)a.height()+1,a.z()));
+        j.add("openingTransect",transect(source,a.x(),a.z(),a.angle(),a.floor()+5,0,a.reach()+5));return j;
+    }
+    private static JsonArray transect(CommandSourceStack source,int x,int z,double angle,int y,double from,double to) {
+        JsonArray samples=new JsonArray();for(int i=0;i<=16;i++) {
+            double v=from+(to-from)*i/16;
+            samples.add(block(source,(int)Math.round(x-v*Math.sin(angle)),y,(int)Math.round(z+v*Math.cos(angle))));
+        }return samples;
+    }
+    private static JsonObject poolCheck(CommandSourceStack source,NativeCoastalModel model,CoastalLandforms.Pool p) {
+        JsonObject j=new JsonObject();j.addProperty("type","pool");j.addProperty("centerX",p.x());j.addProperty("centerZ",p.z());
+        j.addProperty("radiusX",p.rx());j.addProperty("radiusZ",p.rz());j.addProperty("waterPlane",p.water());j.addProperty("depth",p.depth());
+        int extent=(int)Math.ceil(Math.max(p.rx(),p.rz())*1.8+3),expected=0,water=0,missing=0,unsupported=0;
+        for(int dx=-extent;dx<=extent;dx++)for(int dz=-extent;dz<=extent;dz++) {
+            int x=p.x()+dx,z=p.z()+dz;var c=model.detail(x,z);
+            if(!p.equals(c.pool()) || !model.waterCandidate(x,p.water()-1,z))continue;
+            expected++;var chunk=source.getLevel().getChunkSource().getChunkNow(Math.floorDiv(x,16),Math.floorDiv(z,16));
+            if(chunk==null) {missing++;continue;}
+            if(chunk.getBlockState(new BlockPos(x,p.water()-1,z)).is(Blocks.WATER))water++;
+            if(chunk.getBlockState(new BlockPos(x,p.water()-p.depth()-1,z)).isAir())unsupported++;
+        }
+        j.addProperty("expectedWaterColumns",expected);j.addProperty("waterColumnsAtExpectedLevel",water);
+        j.addProperty("unloadedExpectedColumns",missing);j.addProperty("airUnderExpectedFloor",unsupported);
+        j.add("centerFloor",block(source,p.x(),p.water()-p.depth()-1,p.z()));return j;
     }
     private static JsonObject block(CommandSourceStack source,int x,int y,int z) {
         JsonObject result=new JsonObject();result.addProperty("x",x);result.addProperty("y",y);result.addProperty("z",z);

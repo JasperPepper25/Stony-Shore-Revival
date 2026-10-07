@@ -38,3 +38,10 @@ jobs:
           name: stony-shore-revival-forge-1.20.1
           path: build/libs/*-srg.jar
           if-no-files-found: error
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stony-shore-test-results
+          path: build/test-results/test/*.xml
+          if-no-files-found: warn

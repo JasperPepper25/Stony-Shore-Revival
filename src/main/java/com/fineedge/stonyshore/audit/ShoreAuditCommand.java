@@ -58,9 +58,10 @@ public final class ShoreAuditCommand {
                     if(!name.matches("[a-zA-Z0-9_-]{1,32}"))throw new IllegalArgumentException("Use 1–32 letters, numbers, hyphens or underscores.");
                     var report=TerrainDiagnostics.capture(c.getSource());
                     var store=SITES.computeIfAbsent(c.getSource().getLevel(),k->new AuditSiteStore<>(16));
-                    String evicted=store.put(name,report);
+                    var saved=store.append(name,report);
+                    String evicted=saved.evicted();
                     int shore=report.json().get("activeShoreColumns").getAsInt();
-                    c.getSource().sendSuccess(()->Component.literal("Saved shore site "+name+" ("+shore+" active shore columns). Included in /stonyshore audit."
+                    c.getSource().sendSuccess(()->Component.literal("Saved shore site "+saved.name()+" ("+shore+" active shore columns). Included in /stonyshore audit."
                         +(shore==0?" No shore sampled: move directly over the formation and mark again.":"")
                         +(evicted==null?"":" Oldest site removed: "+evicted)),false);return 1;
                 } catch(RuntimeException ex) {
@@ -98,7 +99,8 @@ public final class ShoreAuditCommand {
         int warnings;
         try (Archive archive = new Archive(output)) {
             JsonObject info = new JsonObject();
-            info.addProperty("format", 7);
+            info.addProperty("format", 8);
+            info.addProperty("densityEncoding", "Root holders unwrapped; referenced density keys preserved and exported separately.");
             info.addProperty("createdUtc", Instant.now().toString());
             info.addProperty("scope", "Loaded registry encodings, selected packs, worldgen resource stacks, and allowlisted worldgen configs. Includes command-location X/Y/Z and a sparse nearby loaded-block sample. No player inventories, world seed or existing logs are collected. Export failures include diagnostic stack traces. Runtime mixins may make additional changes not represented here.");
             info.add("selectedPacksInRepositoryOrder", GSON.toJsonTree(server.getPackRepository().getSelectedIds()));

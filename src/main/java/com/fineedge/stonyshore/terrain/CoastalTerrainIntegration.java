@@ -9,6 +9,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
+import net.minecraft.world.level.biome.Climate;
 import net.minecraft.world.level.levelgen.*;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraftforge.event.level.LevelEvent;
@@ -50,15 +51,16 @@ public final class CoastalTerrainIntegration {
                 + finalNodes.size()+" final / "+initialNodes.size()+" preliminary"); return;
         }
         var sampler = random.sampler();
-        var source = generator.getBiomeSource();
+        var source = (MultiNoiseBiomeSource)generator.getBiomeSource();
         AtomicBoolean failed = new AtomicBoolean();
         NativeCoastalModel columns = new NativeCoastalModel(level.getSeed(),63,level.getMaxBuildHeight(),
             (x,y,z) -> initialNodes.get(0).input().compute(new DensityFunction.SinglePointContext(x,y,z)),
-            (x,z) -> source.getNoiseBiome(QuartPos.fromBlock(x),QuartPos.fromBlock(65),QuartPos.fromBlock(z),sampler).is(Biomes.STONY_SHORE),
-            (x,z) -> source.getNoiseBiome(QuartPos.fromBlock(x),QuartPos.fromBlock(65),QuartPos.fromBlock(z),sampler).is(BiomeTags.IS_OCEAN),
+            (x,z) -> surfaceBiome(source,sampler,x,z).is(Biomes.STONY_SHORE),
+            (x,z) -> surfaceBiome(source,sampler,x,z).is(BiomeTags.IS_OCEAN),
             (x,y,z) -> source.getNoiseBiome(QuartPos.fromBlock(x),QuartPos.fromBlock(y),QuartPos.fromBlock(z),sampler).is(Biomes.STONY_SHORE),
             new CoastalShape.Options(ShoreConfig.LANDFORMS.get(),ShoreConfig.POOLS.get(),ShoreConfig.ARCHES.get(),
-                ShoreConfig.SANDY_SHELVES.get(),ShoreConfig.BEACH_FREQUENCY.get()));
+                ShoreConfig.SANDY_SHELVES.get(),ShoreConfig.BEACH_FREQUENCY.get()),
+            (x,y,z)->finalNodes.get(0).input().compute(new DensityFunction.SinglePointContext(x,y,z)));
         finalNodes.forEach(node -> node.bind(columns,failed));
         initialNodes.forEach(node -> node.bind(columns,failed));
         State state=new State("installed",columns,failed,finalNodes.get(0).input());
@@ -74,6 +76,16 @@ public final class CoastalTerrainIntegration {
         return result;
     }
 
+    private static net.minecraft.core.Holder<net.minecraft.world.level.biome.Biome> surfaceBiome(
+            MultiNoiseBiomeSource source,Climate.Sampler sampler,int x,int z) {
+        var p=sampler.sample(QuartPos.fromBlock(x),QuartPos.fromBlock(65),QuartPos.fromBlock(z));
+        // Only this classification query uses surface depth; the world's biome sampler is untouched.
+        return source.getNoiseBiome(new Climate.TargetPoint(p.temperature(),p.humidity(),p.continentalness(),
+            p.erosion(),0,p.weirdness()));
+    }
+    public static boolean shoreColumn(ServerLevel level,int x,int z) {
+        var model=sampler(level);return model!=null && model.shoreColumn(x,z);
+    }
     private static boolean version(String mod, String expected) {
         return ModList.get().getModContainerById(mod).map(c -> c.getModInfo().getVersion().toString().equals(expected)).orElse(false);
     }
@@ -154,9 +166,10 @@ public final class CoastalTerrainIntegration {
         result.addProperty("adapter", "lithostitched-1.4.11-preseed-native-density");
         result.addProperty("injectionPriority",1100);
         result.addProperty("runtimeRouterReplacement",false);
-        result.addProperty("densityConstruction","adaptive original-terrain profiles; cave-preserving cuts and bounded surface construction");
-        result.addProperty("inlandTransitionWidthBlocks","24–48, based on original height");
+        result.addProperty("densityConstruction","monotone height reconstruction; surface-climate coast; cave-preserving cuts and bounded ocean apron");
+        result.addProperty("inlandTransitionWidthBlocks","24â€“48, based on original height");
         result.addProperty("quarkStoneExclusion","per-destination jasper/shale/limestone in shore biome or shore surface columns; optional Quark mixin");
+        result.addProperty("quarkGeneratorsObserved",com.fineedge.stonyshore.generation.QuarkStonePolicy.generatorsObserved());
         result.addProperty("quarkClusterHookObserved",com.fineedge.stonyshore.generation.QuarkStonePolicy.hookObserved());
         result.addProperty("quarkStonePlacementsRejectedProcessTotal",com.fineedge.stonyshore.generation.QuarkStonePolicy.rejectedPlacements());
         result.addProperty("biomePlacementModified",false);

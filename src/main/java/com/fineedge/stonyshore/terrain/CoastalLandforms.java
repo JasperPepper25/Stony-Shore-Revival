@@ -30,7 +30,7 @@ public final class CoastalLandforms {
             return Math.max(Math.hypot(uu,yy)-irregular,Math.abs(v(px,pz))/length-1);
         }
         double reserve(int px,int pz) {
-            double edge=Math.max(Math.abs(u(px,pz))/(width+6),Math.abs(v(px,pz))/(length+3));
+            double edge=Math.hypot(u(px,pz)/(width+6),v(px,pz)/(length+7));
             return (1-smooth((edge-0.8)/0.45))*(1-smooth((Math.abs(v(px,pz))-(length-4))/4));
         }
     }

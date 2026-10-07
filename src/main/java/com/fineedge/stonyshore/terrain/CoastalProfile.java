@@ -26,13 +26,17 @@ public final class CoastalProfile {
     }
     public Sample sample(int x,int z) {
         int gx=Math.floorDiv(x,32)*32,gz=Math.floorDiv(z,32)*32;
-        double fx=CoastalShape.smooth(Math.floorMod(x,32)/32.0),fz=CoastalShape.smooth(Math.floorMod(z,32)/32.0);
-        Sample a=node(gx,gz),b=node(gx+32,gz),c=node(gx,gz+32),d=node(gx+32,gz+32);
-        return new Sample(blend(a.median,b.median,c.median,d.median,fx,fz),
-            blend(a.upper,b.upper,c.upper,d.upper,fx,fz),blend(a.relief,b.relief,c.relief,d.relief,fx,fz),
-            blend(a.slope,b.slope,c.slope,d.slope,fx,fz));
+        double fx=Math.floorMod(x,32)/32.0,fz=Math.floorMod(z,32)/32.0;
+        Sample[][] grid=new Sample[4][4];
+        for(int i=0;i<4;i++)for(int j=0;j<4;j++)grid[i][j]=node(gx+(i-1)*32,gz+(j-1)*32);
+        double median=blend(grid,fx,fz,Sample::median);
+        return new Sample(median,Math.max(median,blend(grid,fx,fz,Sample::upper)),
+            Math.max(0,blend(grid,fx,fz,Sample::relief)),Math.max(0,blend(grid,fx,fz,Sample::slope)));
     }
-    private static double blend(double a,double b,double c,double d,double x,double z) {
-        return (a+(b-a)*x)*(1-z)+(c+(d-c)*x)*z;
+    private static double blend(Sample[][] grid,double x,double z,java.util.function.ToDoubleFunction<Sample> value) {
+        double[] rows=new double[4];
+        for(int j=0;j<4;j++)rows[j]=CoastalInterpolation.cubic(value.applyAsDouble(grid[0][j]),
+            value.applyAsDouble(grid[1][j]),value.applyAsDouble(grid[2][j]),value.applyAsDouble(grid[3][j]),x);
+        return CoastalInterpolation.cubic(rows[0],rows[1],rows[2],rows[3],z);
     }
 }
