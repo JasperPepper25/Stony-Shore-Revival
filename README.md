@@ -2,6 +2,12 @@
 
 A Forge 1.20.1 source project for an additive stony-shore overhaul. The GitHub Actions workflow builds an installable remapped JAR and stores it as a workflow artifact. Do not put the source ZIP into `mods`.
 
+## World generation research
+
+The [world generation research notebook](docs/research/worldgen/README.md) reviews Tectonic, Terralith, Larion, Lithostitched, TerraBlender, BOP, RU, BWG, Geophilic, UltraTerraForged, additional engines, and primary procedural-terrain research. It includes source references, compatibility boundaries, and proposed experiments for natural coastlines, attached arches, shelf overhangs, and tide pools.
+
+Reviewed October 9, 2026, against the [V9 development baseline](https://github.com/JasperPepper25/Stony-Shore-Revival/tree/c61270e946adcf06f57ff60c82d90cb3303271b2). The prototype instructions below describe the V4 code on this branch.
+
 ## What this prototype does
 
 - Uses Forge's `add_features` biome modifier on `minecraft:stony_shore`. It does not replace the biome, noise settings, structure sets, surface rules, or neighboring terrain generation.
