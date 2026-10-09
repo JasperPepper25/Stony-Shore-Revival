@@ -1,12 +1,12 @@
 # Terrain rewrite development branch
 
-**0.6.0-terrain.8 reconstructs smoother coastal slopes and restores feature opportunities.**
-Surface-climate classification avoids cave-biome gaps at shorelines. Smaller
-supported arches and varied contained pools can fit transition areas, while
-selected sand benches lower the foot of tall cliffs. The inland blend and
-preservation of shallow cave air are retained.
+**0.6.0-terrain.9 preserves cliffs while extending coastal formations seaward.**
+Sand beaches and gradual underwater shelves have a bounded ocean footprint.
+Arches form in attached rock fins projecting from the coast, and overhangs form
+as projecting cliff shelves. Tide pools have broader wet interiors and multiple
+placement opportunities on supported shelves. Actual biome placement is retained.
 
-See [installation, changes and test instructions](docs/terrain-test-8.md).
+See [installation, changes and test instructions](docs/terrain-test-9.md).
 The supported terrain stack is Tectonic 3.0.17 / Terralith 2.5.4 /
 Lithostitched 1.4.11, Minecraft 1.20.1, sea level 63, without WWOO.
 Use a fresh test world; existing generated chunks are not repaired.

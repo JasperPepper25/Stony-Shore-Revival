@@ -34,6 +34,7 @@ public final class ShoreSurfacePass {
         Block rocky = optionalBlock("biomeswevegone:rocky_stone");
         boolean any = false;
         boolean coastalTerrain = CoastalTerrainIntegration.installed(world.getLevel());
+        var model=CoastalTerrainIntegration.sampler(world.getLevel());
 
         // World-coordinate value noise makes adjacent chunks agree on the same broad bands.
         for (int x = minX; x < minX + 16; ++x) {
@@ -44,19 +45,25 @@ public final class ShoreSurfacePass {
                 BlockPos surface = new BlockPos(x, top, z);
                 boolean stony=world.getBiome(surface).is(Biomes.STONY_SHORE);
                 boolean ocean=world.getBiome(surface).is(BiomeTags.IS_OCEAN);
+                var detail=regional && model!=null?model.detail(x,z):null;
+                boolean oceanRock=ocean && detail!=null && detail.featureInfluence()>0.001
+                    && (detail.arch()!=null || detail.overhang()!=null);
                 if(apronOnly ? !ocean : !stony) continue;
+                boolean beachCap=false;int beachFloor=top;
                 if(regional) {
                     // Terrain Slabs can finish before this pass; recolor its generated slab
                     // along with the supporting beach instead of rejecting the whole cap.
                     BlockState slab=world.getBlockState(surface);
                     BlockPos floor=BeachMaterials.generatedStoneSlab(slab) ? surface.below() : surface;
-                    any |= sandCap(world,floor,CoastalTerrainIntegration.sandCover(world.getLevel(),x,z,floor.getY()));
+                    beachFloor=floor.getY();
+                    beachCap=sandCap(world,floor,CoastalTerrainIntegration.sandCover(world.getLevel(),x,z,beachFloor));
+                    any |= beachCap;
                 }
-                if(apronOnly) continue;
-                var model=CoastalTerrainIntegration.sampler(world.getLevel());
-                double rockWeight=model==null?1:ShoreTransition.rockWeight(model.ground(x,z).inlandDistance());
+                // Attached ocean rock bodies share the shore palette without relabelling biomes.
+                if(apronOnly && !oceanRock) continue;
+                double rockWeight=model==null || oceanRock?1:ShoreTransition.rockWeight(model.ground(x,z).inlandDistance());
                 // Topsoil follows the adjacent inland biome and fades through broad patches.
-                if(rockWeight<1 && top>sea+6 && isSourceStone(world.getBlockState(surface))
+                if(!beachCap && !apronOnly && rockWeight<1 && top>sea+6 && isSourceStone(world.getBlockState(surface))
                     && world.getBlockState(surface.above()).isAir()
                     && valueNoise(x+117,z-691,7)>rockWeight) {
                     BlockState cap=ShoreTransition.inlandCap(world.getLevel(),x,top,z);
@@ -97,6 +104,7 @@ public final class ShoreSurfacePass {
                 double tuff = valueNoise(x + 2764, z - 3852, 11);
                 // Include visible cliff faces, but never excavate a cliff or replace ores.
                 for (int y = top; y >= Math.max(sea - 10, top - 92); --y) {
+                    if(beachCap && y>=beachFloor-2)continue;
                     BlockPos pos = new BlockPos(x, y, z);
                     BlockState old = world.getBlockState(pos);
                     if (!isSourceStone(old)) continue;
@@ -127,7 +135,8 @@ public final class ShoreSurfacePass {
         int sea=world.getSeaLevel();
         if(coverage<=0) return false;
         BlockState above=world.getBlockState(surface.above());
-        if(!above.isAir() && above.getFluidState().isEmpty() && !BeachMaterials.generatedStoneSlab(above)) return false;
+        if(!above.isAir() && above.getFluidState().isEmpty() && !BeachMaterials.generatedStoneSlab(above)
+            && !above.canBeReplaced()) return false;
         double upper=Math.max(0,Math.min(1,(surface.getY()-(sea+2))/4.0));
         coverage*=1-upper*upper*(3-2*upper);
         // A continuous field keeps the beach edge irregular without producing
@@ -140,19 +149,35 @@ public final class ShoreSurfacePass {
             || !isSandSubstrate(world.getBlockState(surface.below(2)))) return false;
         // Replace supported material only. The sea-floor may be covered by aquatic plants.
         if(!world.getBlockState(surface.below(3)).isFaceSturdy(world,surface.below(3),net.minecraft.core.Direction.UP)) return false;
-        world.setBlock(surface.below(2),Blocks.SANDSTONE.defaultBlockState(),2);
-        world.setBlock(surface.below(),Blocks.SAND.defaultBlockState(),2);
-        world.setBlock(surface,Blocks.SAND.defaultBlockState(),2);
+        boolean sand=beachSandAt(surface.getX(),surface.getZ(),world.getSeed());
+        world.setBlock(surface.below(2),(sand?Blocks.SANDSTONE:Blocks.STONE).defaultBlockState(),2);
+        world.setBlock(surface.below(),(sand?Blocks.SAND:Blocks.STONE).defaultBlockState(),2);
+        world.setBlock(surface,(sand?Blocks.SAND:Blocks.STONE).defaultBlockState(),2);
         if(BeachMaterials.generatedStoneSlab(above)) {
-            Block sandSlab=optionalBlock("terrain_slabs:sand_slab");
-            if(sandSlab!=null) world.setBlock(surface.above(),BeachMaterials.copySlab(above,sandSlab),2);
+            Block capSlab=optionalBlock(sand?"terrain_slabs:sand_slab":"terrain_slabs:terrain_stone_slab");
+            if(capSlab!=null) world.setBlock(surface.above(),BeachMaterials.copySlab(above,capSlab),2);
+        } else {
+            // The material pass follows vegetation placement; remove only plants whose new
+            // natural cap cannot support them, including the upper half of a tall plant.
+            for(int dy=1;dy<=2;dy++) {
+                BlockPos pos=surface.above(dy);BlockState plant=world.getBlockState(pos);
+                if(!plant.isAir() && plant.getFluidState().isEmpty() && plant.canBeReplaced()
+                    && !plant.canSurvive(world,pos))world.setBlock(pos,Blocks.AIR.defaultBlockState(),2);
+            }
         }
         return true;
     }
-    private static boolean isSandSubstrate(BlockState state) {
+    static boolean beachSandAt(int x,int z,long seed) {
+        int shift=(int)(seed ^ (seed >>> 32));
+        // Sparse connected stone outcrops; the remaining designated footprint is sandy.
+        return valueNoise(x+shift+173,z-shift-389,29)<.77;
+    }
+    static boolean isSandSubstrate(BlockState state) {
         return !state.hasBlockEntity() && (state.is(net.minecraftforge.common.Tags.Blocks.ORES) || isSourceStone(state) || state.is(Blocks.SAND) || state.is(Blocks.SANDSTONE)
             || state.is(Blocks.GRAVEL) || state.is(Blocks.COBBLESTONE) || state.is(Blocks.MOSSY_COBBLESTONE)
-            || state.is(Blocks.TUFF));
+            || state.is(Blocks.TUFF) || state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.DIRT)
+            || state.is(Blocks.COARSE_DIRT) || state.is(Blocks.ROOTED_DIRT) || state.is(Blocks.PODZOL)
+            || state.is(Blocks.MYCELIUM) || state.is(Blocks.MOSS_BLOCK));
     }
 
     private static BlockState palette(BlockState old, int y, int top, int sea, double band,

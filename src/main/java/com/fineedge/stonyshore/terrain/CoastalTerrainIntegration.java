@@ -166,7 +166,9 @@ public final class CoastalTerrainIntegration {
         result.addProperty("adapter", "lithostitched-1.4.11-preseed-native-density");
         result.addProperty("injectionPriority",1100);
         result.addProperty("runtimeRouterReplacement",false);
-        result.addProperty("densityConstruction","monotone height reconstruction; surface-climate coast; cave-preserving cuts and bounded ocean apron");
+        result.addProperty("densityConstruction","monotone height reconstruction; surface climate plus terrain-top coast; cliff-preserving beach profile; attached seaward rock volumes");
+        result.addProperty("oceanTerrainReachBlocks",CoastalBeachProfile.OCEAN_REACH);
+        result.addProperty("poolConstruction","terrace-fitted irregular basins; up to two per planning region; validated wet area and floor");
         result.addProperty("inlandTransitionWidthBlocks","24â€“48, based on original height");
         result.addProperty("quarkStoneExclusion","per-destination jasper/shale/limestone in shore biome or shore surface columns; optional Quark mixin");
         result.addProperty("quarkGeneratorsObserved",com.fineedge.stonyshore.generation.QuarkStonePolicy.generatorsObserved());

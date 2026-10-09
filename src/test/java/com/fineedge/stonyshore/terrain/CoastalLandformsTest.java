@@ -18,7 +18,7 @@ class CoastalLandformsTest {
                 double floor=plans.poolFloor(p,x,z,110);
                 if(Math.abs(x-p.x())==24 || Math.abs(z-p.z())==24)
                     assertEquals(110,floor); // Complete untouched outer rim.
-                assertTrue(floor>=p.water()-p.depth()-0.5);
+                assertTrue(floor>=p.water()-p.depth()-0.75);
                 assertTrue(floor<=110);
             }
         }

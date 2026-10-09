@@ -15,7 +15,7 @@ final class TerrainDiagnostics {
     static Report capture(CommandSourceStack source) {
         var level=source.getLevel();var origin=BlockPos.containing(source.getPosition());
         var model=CoastalTerrainIntegration.sampler(level);var baseline=CoastalTerrainIntegration.baselineFinal(level);var random=level.getChunkSource().randomState();
-        JsonObject result=new JsonObject();result.addProperty("format",3);
+        JsonObject result=new JsonObject();result.addProperty("format",4);
         result.addProperty("capturedUtc",java.time.Instant.now().toString());
         result.addProperty("dimension",level.dimension().location().toString());
         result.addProperty("centerX",origin.getX());result.addProperty("centerY",origin.getY());result.addProperty("centerZ",origin.getZ());
@@ -68,6 +68,9 @@ final class TerrainDiagnostics {
                 row.addProperty("influence",planned.mask());row.addProperty("sandStrength",planned.sand());row.addProperty("plannedWaterPlane",waterPlane);
                 row.addProperty("featureInfluence",planned.featureInfluence());
                 row.addProperty("oceanBoundaryDistance",model.ground(x,z).oceanDistance());
+                row.addProperty("oceanTerrainColumn",model.ground(x,z).ocean());
+                row.addProperty("shoreAnchorHeight",model.ground(x,z).shoreHeight());
+                row.addProperty("plannedGroundBelowProjection",planned.terrainSurface());
                 row.addProperty("plannedVersusMeasuredFloorDelta",floor-planned.surface());
                 row.addProperty("rawDensityAtPlannedWaterLevel",random.router().finalDensity()
                     .compute(new DensityFunction.SinglePointContext(x,waterPlane-1,z)));
@@ -119,8 +122,15 @@ final class TerrainDiagnostics {
     private static JsonObject archCheck(CommandSourceStack source,CoastalLandforms.Arch a) {
         JsonObject j=new JsonObject();j.addProperty("type","arch");j.addProperty("centerX",a.x());j.addProperty("centerZ",a.z());
         j.addProperty("height",a.height());j.addProperty("width",a.width());j.addProperty("length",a.length());
+        if(a.fin()!=null) {
+            j.addProperty("construction","attached_seaward_fin_with_crosswise_opening");
+            j.addProperty("rootX",a.fin().rootX());j.addProperty("rootZ",a.fin().rootZ());
+            j.addProperty("seawardDirectionRadians",a.fin().direction());j.addProperty("seawardReach",a.fin().reach());
+            j.add("attachment",block(source,a.fin().rootX(),(int)Math.floor(a.fin().crest()-12),a.fin().rootZ()));
+        }
         j.add("openingCenter",block(source,a.x(),(int)(a.sea()+a.height()*0.43),a.z()));
-        j.add("roof",block(source,a.x(),(int)Math.ceil(a.sea()+a.height()+3),a.z()));
+        int roof=a.fin()==null?(int)Math.ceil(a.sea()+a.height()+3):(int)Math.floor(a.fin().top(a.x(),a.z()))-1;
+        j.add("roof",block(source,a.x(),roof,a.z()));
         for(int sign:new int[]{-1,1})j.add(sign<0?"portalA":"portalB",block(source,
             (int)Math.round(a.x()-sign*Math.sin(a.angle())*(a.length()+2)),(int)(a.sea()+a.height()*0.43),
             (int)Math.round(a.z()+sign*Math.cos(a.angle())*(a.length()+2))));
@@ -128,9 +138,20 @@ final class TerrainDiagnostics {
     }
     private static JsonObject overhangCheck(CommandSourceStack source,CoastalLandforms.Overhang a) {
         JsonObject j=new JsonObject();j.addProperty("type","overhang");j.addProperty("centerX",a.x());j.addProperty("centerZ",a.z());
-        j.addProperty("floorY",a.floor());j.addProperty("height",a.height());j.add("openingCenter",block(source,a.x(),a.floor()+5,a.z()));
-        j.add("roof",block(source,a.x(),a.floor()+(int)a.height()+1,a.z()));
-        j.add("openingTransect",transect(source,a.x(),a.z(),a.angle(),a.floor()+5,0,a.reach()+5));return j;
+        j.addProperty("floorY",a.floor());j.addProperty("height",a.height());
+        if(a.ledge()!=null) {
+            var p=a.ledge();j.addProperty("construction","additive_cliff_lip");j.addProperty("requiresCave",false);
+            j.addProperty("rootX",p.rootX());j.addProperty("rootZ",p.rootZ());j.addProperty("seawardReach",p.reach());
+            j.addProperty("seawardDirectionRadians",p.direction());
+            j.add("roof",block(source,a.x(),(int)Math.floor(p.top(a.x(),a.z()))-1,a.z()));
+            j.add("underLip",block(source,a.x(),(int)Math.floor(p.underside(a.x(),a.z()))-2,a.z()));
+            j.add("attachment",block(source,p.rootX(),(int)Math.floor(p.crest()-12),p.rootZ()));
+        } else {
+            j.add("openingCenter",block(source,a.x(),a.floor()+5,a.z()));
+            j.add("roof",block(source,a.x(),a.floor()+(int)a.height()+1,a.z()));
+            j.add("openingTransect",transect(source,a.x(),a.z(),a.angle(),a.floor()+5,0,a.reach()+5));
+        }
+        return j;
     }
     private static JsonArray transect(CommandSourceStack source,int x,int z,double angle,int y,double from,double to) {
         JsonArray samples=new JsonArray();for(int i=0;i<=16;i++) {

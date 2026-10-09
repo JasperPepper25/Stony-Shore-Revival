@@ -11,16 +11,29 @@ public final class CoastalLandforms {
         double radius(int px, int pz, CoastalTerrainPlanner noise) {
             double dx=px-x, dz=pz-z, c=Math.cos(angle), s=Math.sin(angle);
             double u=(dx*c+dz*s)/rx, v=(-dx*s+dz*c)/rz;
-            double edge=0.87+0.23*noise.noise(px,pz,17,salt);
+            double edge=0.88+0.18*noise.noise(px,pz,7,salt)
+                +0.11*noise.noise(px,pz,3,salt+19);
             return Math.hypot(u,v)/edge;
         }
         double floor(int px,int pz, double base, CoastalTerrainPlanner noise) {
             double r=radius(px,pz,noise);
-            double bowl=1-smooth((r-0.3)/0.7);
-            return base+bowl*(water-depth-0.5-base);
+            // Keep a broad wet core at every depth, then round into the existing dry rim.
+            // The old continuously sloped bowl shrank shallow pools to one wet column.
+            double bowl=1-smooth((r-.68)/.32);
+            return base+bowl*(Math.min(base,water-depth-.75)-base);
         }
+        boolean wetAt(int px,int pz,double base,CoastalTerrainPlanner noise) {
+            return radius(px,pz,noise)<1 && floor(px,pz,base,noise)+.5<=water-1+1e-9;
+        }
+        double influence(int px,int pz,CoastalTerrainPlanner noise) {
+            return 1-smooth((radius(px,pz,noise)-.82)/.30);
+        }
+        double footprintRadius() { return Math.max(rx,rz)*1.2+2; }
     }
-    public record Arch(int x,int z,double angle,double width,double length,double height,double lean,int sea) {
+    public record Arch(int x,int z,double angle,double width,double length,double height,double lean,int sea,CoastalProjection.Fin fin) {
+        public Arch(int x,int z,double angle,double width,double length,double height,double lean,int sea) {
+            this(x,z,angle,width,length,height,lean,sea,null);
+        }
         private double u(int px,int pz) { return (px-x)*Math.cos(angle)+(pz-z)*Math.sin(angle); }
         private double v(int px,int pz) { return -(px-x)*Math.sin(angle)+(pz-z)*Math.cos(angle); }
         public double opening(int px,int y,int pz) {
@@ -30,16 +43,22 @@ public final class CoastalLandforms {
             return Math.max(Math.hypot(uu,yy)-irregular,Math.abs(v(px,pz))/length-1);
         }
         double reserve(int px,int pz) {
+            if(fin!=null)return fin.reserve(px,pz);
             double edge=Math.hypot(u(px,pz)/(width+6),v(px,pz)/(length+7));
             return (1-smooth((edge-0.8)/0.45))*(1-smooth((Math.abs(v(px,pz))-(length-4))/4));
         }
     }
-    public record Overhang(int x,int z,double angle,double width,double reach,double height,int floor) {
+    public record Overhang(int x,int z,double angle,double width,double reach,double height,int floor,CoastalProjection.Ledge ledge) {
+        public Overhang(int x,int z,double angle,double width,double reach,double height,int floor) {
+            this(x,z,angle,width,reach,height,floor,null);
+        }
         public double opening(int px,int y,int pz) {
+            if(ledge!=null)return Math.max(-ledge.edge(px,pz),y-ledge.underside(px,pz));
             double dx=px-x,dz=pz-z,u=dx*Math.cos(angle)+dz*Math.sin(angle),v=-dx*Math.sin(angle)+dz*Math.cos(angle);
             return Math.sqrt(u*u/(width*width)+v*v/(reach*reach)+Math.pow((y-floor-height*0.45)/(height*0.55),2))-1;
         }
         double reserve(int px,int pz) {
+            if(ledge!=null)return ledge.reserve(px,pz);
             double r=Math.hypot((px-x)/(reach+width),(pz-z)/(reach+width));
             return 1-smooth((r-0.4)/0.6);
         }

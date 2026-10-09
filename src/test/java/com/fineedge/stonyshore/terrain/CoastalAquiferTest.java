@@ -74,4 +74,24 @@ class CoastalAquiferTest {
         var parameters=hook.getParameterTypes();
         assertNotNull(NoiseChunk.class.getConstructor(Arrays.copyOf(parameters,parameters.length-1)));
     }
+    @Test void nativeShallowPoolsHaveNegativeWaterDensityAndUseTheirElevatedPlane() {
+        var columns=new NativeCoastalModel(42,63,192,(x,y,z)->(110-y)*.15,(x,z)->true,(x,z)->false,
+            (x,y,z)->true,new CoastalShape.Options(true,true,false,false,0));
+        DensityFunction.SinglePointContext point=null;
+        outer:for(int x=-160;x<=160;x+=2)for(int z=-160;z<=160;z+=2) {
+            var c=columns.detail(x,z);
+            if(c.pool()!=null && c.pool().depth()==1 && columns.waterCandidate(x,c.water()-1,z)) {
+                point=new DensityFunction.SinglePointContext(x,c.water()-1,z);break outer;
+            }
+        }
+        assertNotNull(point,"native one-block pools retain a readable wet footprint");
+        int x=point.blockX(),y=point.blockY(),z=point.blockZ();
+        double density=columns.cap((110-y)*.15,x,y,z,.15);
+        assertTrue(density<0,"shallow water has a negative density margin rather than a zero crossing");
+        var aquifer=wrap(Blocks.AIR.defaultBlockState(),columns,new AtomicBoolean());
+        assertTrue(aquifer.computeSubstance(point,density).is(Blocks.WATER));
+        assertFalse(aquifer.shouldScheduleFluidUpdate());
+        assertTrue(columns.cap((110-(y-1))*.15,x,y-1,z,.15)>0,"solid immediately below the shallow water");
+        assertTrue(aquifer.computeSubstance(new DensityFunction.SinglePointContext(x,y+1,z),-1).isAir());
+    }
 }

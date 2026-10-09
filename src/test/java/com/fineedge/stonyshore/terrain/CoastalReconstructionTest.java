@@ -22,12 +22,13 @@ class CoastalReconstructionTest {
     @Test void oceanApronFadesWithoutAnExactShoreGateWhileInlandStaysUnchanged() {
         var model=new NativeCoastalModel(42,63,192,(x,y,z)->(100-y)*.15,
             (x,z)->x>=0 && x<96,(x,z)->x<0,(x,y,z)->false,new CoastalShape.Options(false,false,false,false,0));
-        assertEquals(0,model.ground(-24,0).mask());
+        assertEquals(0,model.ground(-80,0).mask());
+        assertTrue(model.ground(-48,0).mask()>0 && model.ground(-48,0).mask()<1);
         assertTrue(model.ground(-4,0).mask()>0);
         assertTrue(model.ground(0,0).mask()>.5);
-        for(int x=-24;x<12;x++)assertTrue(Math.abs(model.ground(x+1,0).mask()-model.ground(x,0).mask())<.1);
+        for(int x=-56;x<12;x++)assertTrue(Math.abs(model.ground(x+1,0).mask()-model.ground(x,0).mask())<.1);
         assertEquals(.2,model.cap(.2,100,90,0,.15));
-        assertEquals(.2,model.cap(.2,-24,90,0,.15));
+        assertEquals(.2,model.cap(.2,-80,90,0,.15));
     }
     @Test void profileMedianDoesNotAcquireThirtyTwoBlockBenches() {
         var profile=new CoastalProfile((x,z)->100+.3*x+.2*z);
