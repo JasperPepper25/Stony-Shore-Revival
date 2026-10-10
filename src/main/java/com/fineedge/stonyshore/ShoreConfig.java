@@ -7,6 +7,9 @@ import java.util.List;
 public final class ShoreConfig {
     public static final ForgeConfigSpec SPEC;
     public static final ForgeConfigSpec.BooleanValue COASTAL_TERRAIN;
+    public static final ForgeConfigSpec.BooleanValue COASTAL_BIOMES;
+    public static final ForgeConfigSpec.IntValue COASTAL_INLAND_WIDTH;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ROCKY_COAST_BIOMES;
     public static final ForgeConfigSpec.BooleanValue SANDY_SHELVES;
     public static final ForgeConfigSpec.DoubleValue BEACH_FREQUENCY;
     public static final ForgeConfigSpec.BooleanValue LANDFORMS;
@@ -26,13 +29,20 @@ public final class ShoreConfig {
             .defineInRange("stone_replacement_chance", 0.42, 0.0, 1.0);
         COASTAL_TERRAIN = b.comment("Native coastal density composition for the audited Tectonic/Terralith pack. Restart required. Suspends legacy pools and spires when installed.")
             .define("coastal_terrain", true);
+        COASTAL_BIOMES = b.comment("Coordinate surface coastal biomes with the physical coastal plan. Keeps the original source, TerraBlender regions, caves, rivers and submerged ocean variants. Restart required.")
+            .define("coastal_biome_coordination", true);
+        COASTAL_INLAND_WIDTH = b.comment("Maximum physical coastal corridor inland of the original waterline, in blocks. Terrain and biome transitions share this corridor. Restart required.")
+            .defineInRange("coastal_inland_width", 96, 48, 160);
+        ROCKY_COAST_BIOMES = b.comment("Additional rocky coastal biome IDs used as coast seeds and retained in rocky zones. Missing IDs are ignored. Restart required.")
+            .defineListAllowEmpty("compatible_rocky_coast_biomes", () -> List.of("regions_unexplored:chalk_cliffs"),
+                o -> o instanceof String s && s.matches("[a-z0-9_.-]+:[a-z0-9_./-]+"));
         SANDY_SHELVES = b.comment("Occasional broad low sand shelves within coastal terrain shaping. Restart required.")
             .define("coastal_sandy_shelves", true);
         BEACH_FREQUENCY = b.comment("Broad beach field coverage, independent of biome rarity. Restart required.")
             .defineInRange("coastal_beach_frequency",0.65,0.0,1.0);
         LANDFORMS = b.comment("Local upper shore ledges, contained elevated pools, and cliff-foot beaches. Restart required.")
             .define("coastal_landforms", true);
-        ARCHES = b.comment("Occasional carved arches in suitable shore headlands. Requires coastal_landforms; restart required.")
+        ARCHES = b.comment("Occasional attached seaward rock arches in suitable headlands. Requires coastal_landforms; restart required.")
             .define("coastal_arches", true);
         POOLS = b.define("tide_pools", true);
         SPIRES = b.define("stone_spires", true);

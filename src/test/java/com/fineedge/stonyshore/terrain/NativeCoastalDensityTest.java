@@ -12,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.*;
 class NativeCoastalDensityTest {
     @BeforeAll static void bootstrap() {SharedConstants.tryDetectVersion();Bootstrap.bootStrap();}
     private static NativeCoastalModel model(long seed,double height) {
-        return new NativeCoastalModel(seed,63,192,(x,y,z)->(height-y)*.15,(x,z)->true,(x,z)->false,
-            (x,y,z)->true,new CoastalShape.Options(false,true,false,false,0));
+        return new NativeCoastalModel(seed,63,192,(x,y,z)->((x>=0?height:45)-y)*.15,(x,z)->x>=0,(x,z)->x<0,
+            (x,y,z)->x>=0,new CoastalShape.Options(false,true,false,false,0));
     }
     @Test void codecRoundTripsWithoutCapturingRuntimeContext() {
         var node=new NativeCoastalDensity(DensityFunctions.constant(.2),.15);
@@ -25,6 +25,8 @@ class NativeCoastalDensityTest {
         var template=new NativeCoastalDensity(DensityFunctions.constant(.2),.15);
         var a=(NativeCoastalDensity)template.mapAll(df->df);var b=(NativeCoastalDensity)template.mapAll(df->df);
         var ma=model(42,150);var mb=model(42,90);
+        assertTrue(ma.ground(24,24).mask()>.5,"high fixture has an active physical coastal corridor");
+        assertTrue(mb.ground(24,24).mask()>.5,"low fixture has an active physical coastal corridor");
         a.bind(ma,new AtomicBoolean());b.bind(mb,new AtomicBoolean());
         var point=new DensityFunction.SinglePointContext(24,90,24);
         assertEquals(ma.cap(.2,24,90,24,.15),a.compute(point),1e-9);

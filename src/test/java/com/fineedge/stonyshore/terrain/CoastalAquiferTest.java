@@ -75,10 +75,11 @@ class CoastalAquiferTest {
         assertNotNull(NoiseChunk.class.getConstructor(Arrays.copyOf(parameters,parameters.length-1)));
     }
     @Test void nativeShallowPoolsHaveNegativeWaterDensityAndUseTheirElevatedPlane() {
-        var columns=new NativeCoastalModel(42,63,192,(x,y,z)->(110-y)*.15,(x,z)->true,(x,z)->false,
-            (x,y,z)->true,new CoastalShape.Options(true,true,false,false,0));
+        var columns=new NativeCoastalModel(42,63,192,(x,y,z)->((x>=0?110:45)-y)*.15,
+            (x,z)->x>=0 && x<96,(x,z)->x<0,(x,y,z)->x>=0 && x<96,
+            new CoastalShape.Options(true,true,false,false,0));
         DensityFunction.SinglePointContext point=null;
-        outer:for(int x=-160;x<=160;x+=2)for(int z=-160;z<=160;z+=2) {
+        outer:for(int x=24;x<=72;x+=2)for(int z=-384;z<=384;z+=2) {
             var c=columns.detail(x,z);
             if(c.pool()!=null && c.pool().depth()==1 && columns.waterCandidate(x,c.water()-1,z)) {
                 point=new DensityFunction.SinglePointContext(x,c.water()-1,z);break outer;

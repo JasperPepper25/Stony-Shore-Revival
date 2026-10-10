@@ -31,6 +31,7 @@ public final class StonyShoreRevival {
         MinecraftForge.EVENT_BUS.addListener(ShoreAuditCommand::register);
         MinecraftForge.EVENT_BUS.addListener(com.fineedge.stonyshore.audit.GenerationRecording::loaded);
         MinecraftForge.EVENT_BUS.addListener(net.minecraftforge.eventbus.api.EventPriority.LOWEST, CoastalTerrainIntegration::onLevelLoad);
+        MinecraftForge.EVENT_BUS.addListener(CoastalTerrainIntegration::onLevelUnload);
         ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, ShoreConfig.SPEC);
     }
 }

@@ -64,4 +64,25 @@ class RegionalCoastTest {
         }
         assertTrue(best>0);
     }
+    @Test void aDryRidgeSeparatesAnInlandWaterlineFromNearbyOpenOcean() {
+        // Lake x=-64..0, dry ridge x=-96..-64, true ocean farther west.
+        // The old distant-ocean probe could hop across that ridge and accept x=0
+        // as a second coastal waterline. The fixed wet transect must reject it.
+        var blocked=new RegionalCoast(63,96,
+            (x,z)->x>=0 || x>=-96 && x< -64?110:45,
+            (x,z)->x>=0 && x<=32,(x,z)->x< -96);
+        var connected=new RegionalCoast(63,96,(x,z)->x>=0?110:45,
+            (x,z)->x>=0 && x<=32,(x,z)->x< -96);
+        for(int z:new int[]{-129,-1,0,127,128}) {
+            assertTrue(blocked.sample(0,z).distance()>80,"only the real far-side shoreline is measured");
+            assertTrue(Math.abs(connected.sample(0,z).distance())<16,"an uninterrupted wet approach remains coastal");
+            assertTrue(connected.sample(0,z).eligibility()>.9);
+        }
+        var model=new NativeCoastalModel(123,63,192,
+            (x,y,z)->((x>=0 || x>=-96 && x< -64?110:45)-y)*.15,
+            (x,z)->x>=0 && x<=32,(x,z)->x< -96,(x,y,z)->false,
+            new CoastalShape.Options(false,false,false,true,1));
+        assertEquals(0,model.ground(8,0).mask(),"the inland lake bank cannot acquire a beach across a dry ridge");
+        assertEquals(.3,model.cap(.3,8,75,0,.15),1e-9);
+    }
 }

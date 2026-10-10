@@ -1,14 +1,16 @@
 # Terrain rewrite development branch
 
-**0.6.0-terrain.9 preserves cliffs while extending coastal formations seaward.**
-Sand beaches and gradual underwater shelves have a bounded ocean footprint.
-Arches form in attached rock fins projecting from the coast, and overhangs form
-as projecting cliff shelves. Tide pools have broader wet interiors and multiple
-placement opportunities on supported shelves. Actual biome placement is retained.
+**0.7.0-terrain.10 coordinates coastal terrain and surface biomes around a physical coastline.**
+One continuous coastal plan guides beaches, shallow seabeds and local biome
+transitions. Arches retain rounded seaward supports, and thick overhangs anchor
+to actual cliff drops. V9's tide-pool shape and placement tuning are retained.
 
-See [installation, changes and test instructions](docs/terrain-test-9.md).
+See [installation, changes and test instructions](docs/terrain-test-10.md).
+The [runtime validation report](docs/terrain10-runtime-validation.md) records
+saved biome placement, reopening and generation-order checks.
 The supported terrain stack is Tectonic 3.0.17 / Terralith 2.5.4 /
 Lithostitched 1.4.11, Minecraft 1.20.1, sea level 63, without WWOO.
+The surface biome adapter targets TerraBlender 3.0.1.10 when installed.
 Use a fresh test world; existing generated chunks are not repaired.
 
 Use `/stonyshore mark <label>` directly above each test formation. Repeated labels
@@ -20,6 +22,12 @@ and `stop` retain bounded generation history. Neither feature scans the world.
 Automated geometry checks do not establish customized-pack appearance or feature
 frequency. The next in-game pass should compare fresh chunks with matching seeds.
 Earlier test notes and the original rewrite plan are historical.
+
+The [world generation research notebook](docs/research/worldgen/README.md)
+contains the source studies and compatibility boundaries behind this redesign.
+Tectonic/Terralith retain the underlying landscape and climate; this build
+coordinates a bounded coastal corridor with their output. It does not rescale
+all biomes or continents.
 
 ---
 

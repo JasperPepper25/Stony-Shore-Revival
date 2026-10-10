@@ -2,7 +2,7 @@ package com.fineedge.stonyshore.terrain;
 
 /** A continuous beach and shallow seabed profile shared by terrain and material decisions. */
 public final class CoastalBeachProfile {
-    public static final int OCEAN_REACH=56;
+    public static final int OCEAN_REACH=RegionalCoast.OCEAN_REACH;
     public record Sample(double surface,double sand) {}
     private final int sea;
     private final CoastalTerrainPlanner noise;
@@ -26,31 +26,26 @@ public final class CoastalBeachProfile {
         double signed=g.oceanDistance()+2.8*(noise.noise(wx,wz,54,1633)-.5);
         double landWidth=8+10*noise.noise(wx,wz,83,1637);
         double dryWidth=4+6*noise.noise(wx,wz,97,1639);
-        double beach,surface;
-        if(g.ocean()) {
-            double distance=Math.max(0,-signed);
-            double outer=1-smooth((distance-(OCEAN_REACH-20))/20);
-            // Elevated terrain labelled as ocean is retained rather than flattened into a beach.
-            double eligible=1-smooth((height-(sea+4))/8);
-            double anchor=smooth((g.shoreHeight()-(sea-10))/12);
-            beach=field*outer*eligible*anchor;
-            double submerged=Math.max(0,distance-dryWidth);
-            double shelf=sea+1.35-.11*submerged-.006*submerged*submerged;
-            shelf+=.32*(noise.noise(wx,wz,37,1643)-.5);
-            surface=height+beach*(shelf-height);
-        } else {
-            double distance=Math.max(0,signed);
-            beach=field*(1-smooth((distance-landWidth)/7));
-            double bench=sea+1.35+Math.min(distance,landWidth)*.045
-                +.32*(noise.noise(wx,wz,37,1643)-.5);
-            // A narrow irregular toe leaves the main cliff relief intact farther inland.
-            double weather=(noise.noise(wx,wz,67,1649)-.5)*1.25;
-            double retained=height+weather*smooth((height-sea)/6);
-            surface=retained+beach*(bench-retained);
-        }
+        // One profile spans dry land, the waterline and seabed. A biome label or a
+        // nearest-anchor height cannot abruptly enable or disable any part of it.
+        double land=1-smooth((signed-landWidth)/14);
+        double outer=1-smooth((-signed-(OCEAN_REACH-32))/32);
+        double offshore=smooth(-g.oceanDistance()/8);
+        double elevated=1-offshore*smooth((height-(sea+4))/8);
+        double beach=field*land*outer*elevated;
+        double submerged=Math.max(0,-signed-dryWidth);
+        double bench=sea+1.35+Math.min(Math.max(0,signed),landWidth)*.045
+            -.11*submerged-.004*submerged*submerged
+            +.32*(noise.noise(wx,wz,37,1643)-.5);
+        // The cliff body remains behind a narrow toe. The offshore apron approaches
+        // the original floor over its outer third with zero transition slope.
+        double weather=(noise.noise(wx,wz,67,1649)-.5)*1.25*(1-offshore);
+        double retained=height+weather*smooth((height-sea)/6);
+        double surface=retained+beach*(bench-retained);
         double heightGate=1-smooth((surface-(sea+3))/6);
         double depthGate=1-smooth((sea-12-surface)/16);
-        double sand=beach*heightGate*depthGate;
+        double stonePatch=smooth((noise.noise(wx,wz,43,1651)-.70)/.30);
+        double sand=beach*heightGate*depthGate*(1-.65*stonePatch);
         return new Sample(surface,Math.max(0,Math.min(1,sand)));
     }
     private static double smooth(double value) {

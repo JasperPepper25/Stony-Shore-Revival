@@ -26,6 +26,7 @@ public final class CoastalShape {
         int x(int root,double distance) { return (int)Math.round(root+Math.cos(angle)*distance); }
         int z(int root,double distance) { return (int)Math.round(root+Math.sin(angle)*distance); }
     }
+    private record CliffRoot(int x,int z,Ground ground,Facing facing) {}
     private final CoastalTerrainPlanner noise;
     private final GroundSampler ground;
     private final Solid support;
@@ -68,7 +69,10 @@ public final class CoastalShape {
     }
     private Column planColumn(int x,int z) {
         Ground g=ground.sample(x,z);
-        if(g.mask<=0)return new Column(g.height,g.height,0,0,sea,null,null,null,0,g.height);
+        // Local terrain influence can end before a previously validated rock volume does.
+        // Distant columns still bypass all regional planning, including cached negative plans.
+        if(g.mask<=0 && (!options.landforms || Math.abs(g.oceanDistance)>112 || g.inlandDistance<=0))
+            return new Column(g.height,g.height,0,0,sea,null,null,null,0,g.height);
         var beach=beaches.sample(x,z,g);
         double surface=beach.surface(),featureInfluence=0,sand=beach.sand();
         CoastalLandforms.Pool pool=null;CoastalLandforms.Arch arch=null;CoastalLandforms.Overhang overhang=null;
@@ -79,7 +83,7 @@ public final class CoastalShape {
             for(int dx=-1;dx<=1;dx++)for(int dz=-1;dz<=1;dz++) {
                 Region r=region(cx+dx,cz+dz);
                 for(var p:r.pools) {
-                    double amount=p.influence(x,z,noise);
+                    double amount=g.mask>0?p.influence(x,z,noise):0;
                     if(amount>0) {
                         surface=p.floor(x,z,poolSurface(x,z),noise);pool=p;water=p.water();
                         featureInfluence=Math.max(featureInfluence,amount);
@@ -95,9 +99,14 @@ public final class CoastalShape {
                 }
             }
         }
+        if(pool==null && !g.ocean && g.height>sea+12) {
+            // A beach toe cannot remove the cliff attachment of an accepted additive form.
+            double attachment=arch!=null?arch.reserve(x,z):overhang!=null?overhang.reserve(x,z):0;
+            surface+=attachment*(Math.max(surface,g.height)-surface);
+        }
         double terrainSurface=surface;
-        if(arch!=null)surface=Math.max(surface,arch.fin().top(x,z));
-        if(overhang!=null)surface=Math.max(surface,overhang.ledge().top(x,z));
+        if(arch!=null && arch.fin().edge(x,z)>0)surface=Math.max(surface,arch.fin().top(x,z));
+        if(overhang!=null && overhang.ledge().edge(x,z)>0)surface=Math.max(surface,overhang.ledge().top(x,z));
         return new Column(g.height,surface,g.mask,sand,water,pool,arch,overhang,featureInfluence,terrainSurface);
     }
     private Region rawRegion(int cx,int cz) { return rawRegions.get(key(cx,cz),k->planRegion(cx,cz)); }
@@ -135,9 +144,9 @@ public final class CoastalShape {
     private static boolean intersects(CoastalLandforms.Pool p,CoastalLandforms.Arch a) {
         return near(p.x(),p.z(),p.footprintRadius(),a.fin().centerX(),a.fin().centerZ(),a.fin().radius());
     }
-    private static boolean intersects(CoastalLandforms.Overhang h,CoastalLandforms.Arch a) { return near(h.x(),h.z(),h.ledge().radius(),a.fin().centerX(),a.fin().centerZ(),a.fin().radius()); }
-    private static boolean intersects(CoastalLandforms.Overhang a,CoastalLandforms.Overhang b) { return near(a.x(),a.z(),a.ledge().radius(),b.x(),b.z(),b.ledge().radius()); }
-    private static boolean intersects(CoastalLandforms.Pool p,CoastalLandforms.Overhang h) { return near(p.x(),p.z(),p.footprintRadius(),h.x(),h.z(),h.ledge().radius()); }
+    private static boolean intersects(CoastalLandforms.Overhang h,CoastalLandforms.Arch a) { return near(h.ledge().centerX(),h.ledge().centerZ(),h.ledge().radius(),a.fin().centerX(),a.fin().centerZ(),a.fin().radius()); }
+    private static boolean intersects(CoastalLandforms.Overhang a,CoastalLandforms.Overhang b) { return near(a.ledge().centerX(),a.ledge().centerZ(),a.ledge().radius(),b.ledge().centerX(),b.ledge().centerZ(),b.ledge().radius()); }
+    private static boolean intersects(CoastalLandforms.Pool p,CoastalLandforms.Overhang h) { return near(p.x(),p.z(),p.footprintRadius(),h.ledge().centerX(),h.ledge().centerZ(),h.ledge().radius()); }
     private Facing oceanFacing(int x,int z) {
         double gx=ground.sample(x+12,z).oceanDistance-ground.sample(x-12,z).oceanDistance;
         double gz=ground.sample(x,z+12).oceanDistance-ground.sample(x,z-12).oceanDistance;
@@ -146,32 +155,60 @@ public final class CoastalShape {
         Ground here=ground.sample(x,z),outside=ground.sample(f.x(x,24),f.z(z,24));
         return outside.oceanDistance<here.oceanDistance-8?f:null;
     }
+    private CliffRoot cliffRoot(int cx,int cz,int x,int z) {
+        Ground origin=ground.sample(x,z);
+        if(origin.mask<.35 || origin.inlandDistance<4 || origin.oceanDistance< -24 || origin.oceanDistance>64
+            || origin.shoreHeight<sea+24)return null;
+        Facing facing=oceanFacing(x,z);if(facing==null)return null;
+        CliffRoot best=null;double bestScore=12;
+        // Locate the supported high side of a real cliff, rather than using a random
+        // inland point and requiring a pre-existing cave underneath its proposed lip.
+        for(int offset=-24;offset<=24;offset+=4) {
+            int px=facing.x(x,offset),pz=facing.z(z,offset);
+            if(Math.floorDiv(px,48)!=cx || Math.floorDiv(pz,48)!=cz)continue;
+            Ground root=ground.sample(px,pz);
+            if(root.mask<.5 || root.ocean || root.inlandDistance<4 || root.height<sea+24
+                || root.oceanDistance<0 || root.oceanDistance>48)continue;
+            Ground outer=ground.sample(facing.x(px,12),facing.z(pz,12));
+            double drop=root.height-outer.height;
+            double score=drop-.15*Math.max(0,root.oceanDistance);
+            if(drop>12 && score>bestScore && outer.oceanDistance<root.oceanDistance-5) {
+                bestScore=score;best=new CliffRoot(px,pz,root,facing);
+            }
+        }
+        return best;
+    }
     private Region planRegion(int cx,int cz) {
         count("regionsPlanned");
         CoastalLandforms.Arch arch=null;CoastalLandforms.Overhang overhang=null;
-        for(int attempt=0;attempt<16;attempt++) {
+        boolean archRegion=options.arches && noise.value(cx,cz,900)<.32;
+        boolean ledgeRegion=noise.value(cx,cz,1200)<.5;
+        for(int attempt=0;attempt<16 && ((archRegion && arch==null) || (ledgeRegion && overhang==null));attempt++) {
             int salt=attempt*37;
             int x=cx*48+3+(int)(noise.value(cx,cz,801+salt)*42),z=cz*48+3+(int)(noise.value(cx,cz,831+salt)*42);
-            Ground g=ground.sample(x,z);
-            if(g.mask<.5 || g.ocean || g.oceanDistance<6 || g.oceanDistance>28 || g.inlandDistance<8 || g.height<sea+30)continue;
-            Facing facing=oceanFacing(x,z);if(facing==null)continue;
-            if(arch==null && options.arches && noise.value(cx,cz,900)<.32) {
+            CliffRoot root=cliffRoot(cx,cz,x,z);if(root==null)continue;
+            x=root.x;z=root.z;Ground g=root.ground;Facing facing=root.facing;
+            if(arch==null && archRegion) {
                 count("archCandidates");
-                double reach=34+12*noise.value(cx,cz,902+salt),thickness=6.5+3*noise.value(cx,cz,903+salt);
+                double reach=38+8*noise.value(cx,cz,902+salt),thickness=6.5+3*noise.value(cx,cz,903+salt);
                 double openingHeight=Math.min(38,Math.max(22,(g.height-sea)*.55));
                 double crest=Math.max(sea+openingHeight+14,Math.min(g.height+2,sea+82));
-                var fin=new CoastalProjection.Fin(x,z,facing.angle,reach,thickness,crest);
-                int ax=facing.x(x,reach*.53),az=facing.z(z,reach*.53);
-                var candidate=new CoastalLandforms.Arch(ax,az,facing.angle,8+4*noise.value(cx,cz,904+salt),
+                Ground toe=ground.sample(facing.x(x,reach-6),facing.z(z,reach-6));
+                var fin=new CoastalProjection.Fin(x,z,facing.angle,reach,thickness,crest,Math.min(sea-10,toe.height-4));
+                int ax=facing.x(x,reach*.43),az=facing.z(z,reach*.43);
+                // Leave a full-height outer pier before the rounded terminal cap begins.
+                double openingWidth=Math.min(8+4*noise.value(cx,cz,904+salt),reach*.23);
+                var candidate=new CoastalLandforms.Arch(ax,az,facing.angle,openingWidth,
                     thickness+2,openingHeight,noise.value(cx,cz,905+salt)*1.4-.7,sea,fin);
                 if(attachedArch(candidate)) {arch=candidate;count("archesSupported");}
                 else count("archesRejectedAttachmentOrPortals");
             }
-            if(overhang==null && noise.value(cx,cz,1200)<.5) {
+            if(overhang==null && ledgeRegion) {
+                count("overhangCandidates");
                 double reach=12+8*noise.value(cx,cz,1202+salt),width=10+8*noise.value(cx,cz,1203+salt);
                 double crest=g.height-1;
                 var ledge=new CoastalProjection.Ledge(x,z,facing.angle,reach,width,crest);
-                int hx=facing.x(x,reach*.6),hz=facing.z(z,reach*.6);
+                int hx=facing.x(x,reach*.72),hz=facing.z(z,reach*.72);
                 var candidate=new CoastalLandforms.Overhang(hx,hz,facing.angle-Math.PI/2,width,reach,12,(int)Math.floor(crest-13),ledge);
                 if(attachedLedge(candidate)) {overhang=candidate;count("overhangsSupported");}
                 else count("overhangsRejectedAttachmentOrFacing");
@@ -192,38 +229,45 @@ public final class CoastalShape {
             int x=(int)Math.round(fin.rootX()-Math.sin(fin.direction())*side*fin.thickness()*.5);
             int z=(int)Math.round(fin.rootZ()+Math.cos(fin.direction())*side*fin.thickness()*.5);
             Ground root=ground.sample(x,z);
-            if(root.mask<.45 || baseSurface(x,z,root)<rootY+3 || !support.test(x,rootY,z))return false;
+            if(root.mask<.45 || root.height<rootY+3 || !support.test(x,rootY,z))return false;
         }
         int tipX=(int)Math.round(fin.rootX()+Math.cos(fin.direction())*(fin.reach()-4));
         int tipZ=(int)Math.round(fin.rootZ()+Math.sin(fin.direction())*(fin.reach()-4));
         Ground tip=ground.sample(tipX,tipZ);
-        if(tip.mask<=0 || tip.inlandDistance<4 || tip.oceanDistance>2)return false;
+        if(tip.inlandDistance<4 || tip.oceanDistance>2 || tip.oceanDistance< -96)return false;
         // The crosswise passage must already face exterior space: never excavate approaches.
         int openingY=(int)(sea+a.height()*.43);
         for(int sign:new int[]{-1,1}) {
             int x=(int)Math.round(a.x()-sign*Math.sin(a.angle())*(a.length()+3));
             int z=(int)Math.round(a.z()+sign*Math.cos(a.angle())*(a.length()+3));
             Ground g=ground.sample(x,z);
-            if(g.mask<=0 || g.inlandDistance<4 || baseSurface(x,z,g)>openingY-3)return false;
+            if(g.inlandDistance<4 || g.oceanDistance< -96 || g.height>openingY-3 || baseSurface(x,z,g)>openingY-3)return false;
         }
         return true;
     }
     private boolean attachedLedge(CoastalLandforms.Overhang a) {
         var p=a.ledge();int rootY=(int)Math.floor(p.crest()-5);
-        if(baseSurface(p.rootX(),p.rootZ(),ground.sample(p.rootX(),p.rootZ()))<rootY+3
+        if(ground.sample(p.rootX(),p.rootZ()).height<rootY+3
             || !support.test(p.rootX(),rootY,p.rootZ()))return false;
         for(int side:new int[]{-1,1}) {
             int x=(int)Math.round(p.rootX()-Math.sin(p.direction())*side*p.width()*.5);
             int z=(int)Math.round(p.rootZ()+Math.cos(p.direction())*side*p.width()*.5);
             Ground root=ground.sample(x,z);
-            if(root.mask<.45 || baseSurface(x,z,root)<rootY+1 || !support.test(x,rootY-2,z))return false;
+            if(root.mask<.45 || root.height<rootY+1 || !support.test(x,rootY-2,z))return false;
         }
-        Ground outer=ground.sample(a.x(),a.z());
-        return outer.mask>.2 && outer.inlandDistance>4 && outer.oceanDistance<ground.sample(p.rootX(),p.rootZ()).oceanDistance-5
-            && baseSurface(a.x(),a.z(),outer)<p.underside(a.x(),a.z())-3;
+        Ground root=ground.sample(p.rootX(),p.rootZ());
+        // Check an actual visible strip below the outer lip, including its shoulders.
+        for(int side=-1;side<=1;side++) {
+            int x=(int)Math.round(a.x()-Math.sin(p.direction())*side*p.width()*.35);
+            int z=(int)Math.round(a.z()+Math.cos(p.direction())*side*p.width()*.35);
+            Ground outer=ground.sample(x,z);
+            if(outer.inlandDistance<4 || outer.oceanDistance< -96 || outer.oceanDistance>root.oceanDistance-5
+                || baseSurface(x,z,outer)>p.underside(x,z)-4)return false;
+        }
+        return true;
     }
     public double density(double original,int x,int y,int z,double scale) {
-        Column c=column(x,z);if(c.mask<=0)return original;
+        Column c=column(x,z);if(c.mask<=0 && c.featureInfluence<=0)return original;
         double rough=(noise.noise(x+y*.37,z-y*.21,27,1701)-.5)*.7;
         if(c.pool!=null || c.sand>.5)rough=0;
         double sculpt=(c.terrainSurface+.5-y+rough)*scale;
@@ -238,7 +282,7 @@ public final class CoastalShape {
             var a=c.arch;double body=a.fin().solid(x,y,z)*scale;
             // Add the seaward fin above the original terrain; retain existing cave air in its attachment.
             if(y>=c.original-3)result=Math.max(result,body);
-            if(a.fin().edge(x,z)>-1 && a.opening(x,y,z)<0)
+            if(y>=c.original-3 && a.fin().edge(x,z)>0 && a.fin().solid(x,y,z)>0 && a.opening(x,y,z)<0)
                 result=Math.min(result,a.opening(x,y,z)*.65);
         }
         if(c.overhang!=null && y>=c.original-3)

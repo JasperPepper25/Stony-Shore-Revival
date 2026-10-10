@@ -53,5 +53,5 @@ tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 
 tasks.named("test") { useJUnitPlatform() }
 
-// Constructor and optional Quark-owned targets: no renamed Minecraft member-name strings.
+// Coordinate biome hooks explicitly include official and SRG selectors for 1.20.1.
 tasks.named("jar", Jar) { manifest.attributes("MixinConfigs": "stonyshorerevival.mixins.json") }

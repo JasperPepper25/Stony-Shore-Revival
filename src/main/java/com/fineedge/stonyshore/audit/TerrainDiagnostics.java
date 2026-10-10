@@ -15,12 +15,12 @@ final class TerrainDiagnostics {
     static Report capture(CommandSourceStack source) {
         var level=source.getLevel();var origin=BlockPos.containing(source.getPosition());
         var model=CoastalTerrainIntegration.sampler(level);var baseline=CoastalTerrainIntegration.baselineFinal(level);var random=level.getChunkSource().randomState();
-        JsonObject result=new JsonObject();result.addProperty("format",4);
+        JsonObject result=new JsonObject();result.addProperty("format",5);
         result.addProperty("capturedUtc",java.time.Instant.now().toString());
         result.addProperty("dimension",level.dimension().location().toString());
         result.addProperty("centerX",origin.getX());result.addProperty("centerY",origin.getY());result.addProperty("centerZ",origin.getZ());
         result.addProperty("horizontalRadiusBlocks",32);
-        result.addProperty("note","Read-only samples of loaded terrain. Original heights are preliminary-density estimates. Current blocks may include later mods, structures or player edits. Opening transects and pool footprint measurements are samples, not proof of complete three-dimensional connectivity.");
+        result.addProperty("note","Read-only samples of loaded terrain. Original heights are estimates from the unmodified final density; coast distance describes the physical waterline. Current blocks may include later mods, structures or player edits. Opening transects and pool footprint measurements are samples, not proof of complete three-dimensional connectivity.");
         result.add("pipeline",CoastalTerrainIntegration.status(level));
         JsonArray rows=new JsonArray(),sections=new JsonArray(),landforms=new JsonArray();
         Set<String> seen=new HashSet<>();int skipped=0;
@@ -52,11 +52,11 @@ final class TerrainDiagnostics {
             row.add("climateAtMeasuredFloor",values);
             int waterTop=Integer.MIN_VALUE,waterPlane=planned==null?sea:planned.water();
             for(int y=Math.max(level.getMinBuildHeight(),waterPlane-7);y<=Math.min(level.getMaxBuildHeight()-1,waterPlane+2);y++)
-                if(chunk.getBlockState(new BlockPos(x,y,z)).is(Blocks.WATER))waterTop=Math.max(waterTop,y);
+                if(chunk.getBlockState(new BlockPos(x,y,z)).getFluidState().is(net.minecraft.tags.FluidTags.WATER))waterTop=Math.max(waterTop,y);
             if(waterTop!=Integer.MIN_VALUE)row.addProperty("measuredWaterTopY",waterTop);
             boolean intended=planned!=null && model.waterCandidate(x,waterPlane-1,z);
             row.addProperty("expectsWaterAtPlaneMinus1",intended);
-            row.addProperty("waterAtExpectedLevel",intended && chunk.getBlockState(new BlockPos(x,waterPlane-1,z)).is(Blocks.WATER));
+            row.addProperty("waterAtExpectedLevel",intended && chunk.getBlockState(new BlockPos(x,waterPlane-1,z)).getFluidState().is(net.minecraft.tags.FluidTags.WATER));
             if(planned!=null) {
                 var profile=model.profile(x,z);JsonObject context=new JsonObject();
                 context.addProperty("type",profile.type(sea));context.addProperty("medianOriginalHeight",profile.median());
@@ -168,7 +168,7 @@ final class TerrainDiagnostics {
             if(!p.equals(c.pool()) || !model.waterCandidate(x,p.water()-1,z))continue;
             expected++;var chunk=source.getLevel().getChunkSource().getChunkNow(Math.floorDiv(x,16),Math.floorDiv(z,16));
             if(chunk==null) {missing++;continue;}
-            if(chunk.getBlockState(new BlockPos(x,p.water()-1,z)).is(Blocks.WATER))water++;
+            if(chunk.getBlockState(new BlockPos(x,p.water()-1,z)).getFluidState().is(net.minecraft.tags.FluidTags.WATER))water++;
             if(chunk.getBlockState(new BlockPos(x,p.water()-p.depth()-1,z)).isAir())unsupported++;
         }
         j.addProperty("expectedWaterColumns",expected);j.addProperty("waterColumnsAtExpectedLevel",water);

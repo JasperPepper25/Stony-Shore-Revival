@@ -14,7 +14,7 @@ class ShoreSurfacePassTest {
             Blocks.MOSS_BLOCK,Blocks.PODZOL,Blocks.COARSE_DIRT,Blocks.STONE,Blocks.SAND})
             assertTrue(ShoreSurfacePass.isSandSubstrate(block.defaultBlockState()));
         for(var block:new net.minecraft.world.level.block.Block[]{Blocks.CHEST,Blocks.OAK_PLANKS,
-            Blocks.GLASS,Blocks.STONE_BRICKS,Blocks.OAK_LOG})
+            Blocks.GLASS,Blocks.STONE_BRICKS,Blocks.OAK_LOG,Blocks.DIAMOND_ORE,Blocks.IRON_ORE})
             assertFalse(ShoreSurfacePass.isSandSubstrate(block.defaultBlockState()));
     }
     @Test void beachMaterialsAreSandDominantWithConnectedStonePatches() {

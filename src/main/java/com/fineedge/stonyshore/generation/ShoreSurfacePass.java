@@ -2,6 +2,7 @@ package com.fineedge.stonyshore.generation;
 
 import com.fineedge.stonyshore.ShoreConfig;
 import com.fineedge.stonyshore.terrain.CoastalTerrainIntegration;
+import com.fineedge.stonyshore.terrain.CoastalBiomeIntegration;
 import static com.fineedge.stonyshore.generation.ShoreBlocks.*;
 import static com.fineedge.stonyshore.generation.ShoreMath.*;
 
@@ -35,6 +36,8 @@ public final class ShoreSurfacePass {
         boolean any = false;
         boolean coastalTerrain = CoastalTerrainIntegration.installed(world.getLevel());
         var model=CoastalTerrainIntegration.sampler(world.getLevel());
+        var originalSource=world.getLevel().getChunkSource().getGenerator().getBiomeSource();
+        var originalClimate=world.getLevel().getChunkSource().randomState().sampler();
 
         // World-coordinate value noise makes adjacent chunks agree on the same broad bands.
         for (int x = minX; x < minX + 16; ++x) {
@@ -48,7 +51,13 @@ public final class ShoreSurfacePass {
                 var detail=regional && model!=null?model.detail(x,z):null;
                 boolean oceanRock=ocean && detail!=null && detail.featureInfluence()>0.001
                     && (detail.arch()!=null || detail.overhang()!=null);
-                if(apronOnly ? !ocean : !stony) continue;
+                // The extension feature also visits inland/beach provider biomes. Only the
+                // shared coastal plan grants material ownership there; ordinary shores are
+                // finished by shore_detail, avoiding a second palette pass on those columns.
+                boolean continuation=detail!=null && (detail.mask()>.001 || detail.featureInfluence()>.001);
+                if(apronOnly ? stony || !continuation : !stony) continue;
+                if(apronOnly && CoastalBiomeIntegration.protectedBiome(
+                    CoastalBiomeIntegration.original(originalSource,originalClimate,x,top,z)))continue;
                 boolean beachCap=false;int beachFloor=top;
                 if(regional) {
                     // Terrain Slabs can finish before this pass; recolor its generated slab
@@ -60,10 +69,10 @@ public final class ShoreSurfacePass {
                     any |= beachCap;
                 }
                 // Attached ocean rock bodies share the shore palette without relabelling biomes.
-                if(apronOnly && !oceanRock) continue;
+                if(apronOnly && ocean && !oceanRock) continue;
                 double rockWeight=model==null || oceanRock?1:ShoreTransition.rockWeight(model.ground(x,z).inlandDistance());
                 // Topsoil follows the adjacent inland biome and fades through broad patches.
-                if(!beachCap && !apronOnly && rockWeight<1 && top>sea+6 && isSourceStone(world.getBlockState(surface))
+                if(!beachCap && !ocean && rockWeight<1 && top>sea+6 && isSourceStone(world.getBlockState(surface))
                     && world.getBlockState(surface.above()).isAir()
                     && valueNoise(x+117,z-691,7)>rockWeight) {
                     BlockState cap=ShoreTransition.inlandCap(world.getLevel(),x,top,z);
@@ -173,7 +182,8 @@ public final class ShoreSurfacePass {
         return valueNoise(x+shift+173,z-shift-389,29)<.77;
     }
     static boolean isSandSubstrate(BlockState state) {
-        return !state.hasBlockEntity() && (state.is(net.minecraftforge.common.Tags.Blocks.ORES) || isSourceStone(state) || state.is(Blocks.SAND) || state.is(Blocks.SANDSTONE)
+        return !state.hasBlockEntity() && !state.is(net.minecraftforge.common.Tags.Blocks.ORES)
+            && (isSourceStone(state) || state.is(Blocks.SAND) || state.is(Blocks.SANDSTONE)
             || state.is(Blocks.GRAVEL) || state.is(Blocks.COBBLESTONE) || state.is(Blocks.MOSSY_COBBLESTONE)
             || state.is(Blocks.TUFF) || state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.DIRT)
             || state.is(Blocks.COARSE_DIRT) || state.is(Blocks.ROOTED_DIRT) || state.is(Blocks.PODZOL)

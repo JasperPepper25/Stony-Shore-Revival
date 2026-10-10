@@ -50,7 +50,7 @@ class CoastalBeachProfileTest {
             var b=profile.sample(x+1,23,new CoastalShape.Ground(64,1,3,48,120,false));
             assertEquals(a,again.sample(x,23,new CoastalShape.Ground(64,1,3,48,120,false)));
             assertTrue(Math.abs(a.surface()-b.surface())<.15);
-            assertTrue(Math.abs(a.sand()-b.sand())<.1);
+            assertTrue(Math.abs(a.sand()-b.sand())<.1,"sand slope at "+x+": "+a.sand()+" to "+b.sand());
         }
     }
 }
