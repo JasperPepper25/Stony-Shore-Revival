@@ -61,6 +61,11 @@ The notebook contains original analysis and source links. Public source is not b
 
 ## Next decisions and future updates
 
+The [V10 implementation follow-up](terrain10-implementation.md) records the
+physical-coast and local biome-band decisions made after the V9 audit. Its
+verification artifacts and pending in-game checks are separate from this source
+review.
+
 Start with the [experiment chapter](coastal-experiments.md) after V9 testing. Prioritize remaining cliff/beach space conflicts and readable pools, then arch attachment and overhang silhouette. Profile the actual hot paths before changing the engine or noise library.
 
 For each future experiment, append a dated decision with the baseline/candidate commits, exact dependencies and active resource order, hypothesis, fixed sites/seed, screenshots or slices, measured results, tradeoffs, and keep/revise/reject outcome. Keep those results distinct from source review. Update pinned references deliberately when upstream versions change instead of silently treating these notes as evergreen.

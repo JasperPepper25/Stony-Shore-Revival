@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.fineedge.stonyshore.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": ["NoiseChunkMixin", "QuarkStoneClusterMixin", "MultiNoiseBiomeSourceMixin", "NoiseBasedChunkGeneratorMixin"],
+  "injectors": { "defaultRequire": 1 }
+}

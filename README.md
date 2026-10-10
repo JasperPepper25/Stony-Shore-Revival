@@ -1,12 +1,39 @@
-# Stony Shore Revival — V4 test build 0.4.0
+# Terrain rewrite development branch
+
+**0.7.0-terrain.10 coordinates coastal terrain and surface biomes around a physical coastline.**
+One continuous coastal plan guides beaches, shallow seabeds and local biome
+transitions. Arches retain rounded seaward supports, and thick overhangs anchor
+to actual cliff drops. V9's tide-pool shape and placement tuning are retained.
+
+See [installation, changes and test instructions](docs/terrain-test-10.md).
+The [runtime validation report](docs/terrain10-runtime-validation.md) records
+saved biome placement, reopening and generation-order checks.
+The supported terrain stack is Tectonic 3.0.17 / Terralith 2.5.4 /
+Lithostitched 1.4.11, Minecraft 1.20.1, sea level 63, without WWOO.
+The surface biome adapter targets TerraBlender 3.0.1.10 when installed.
+Use a fresh test world; existing generated chunks are not repaired.
+
+Use `/stonyshore mark <label>` directly above each test formation. Repeated labels
+receive suffixes instead of replacing earlier captures. One `/stonyshore audit`
+exports up to 16 saved sites with profiles, density sections and loaded-block
+measurements of openings, roofs and pool water. Optional `/stonyshore record start`
+and `stop` retain bounded generation history. Neither feature scans the world.
+
+Automated geometry checks do not establish customized-pack appearance or feature
+frequency. The next in-game pass should compare fresh chunks with matching seeds.
+Earlier test notes and the original rewrite plan are historical.
+
+The [world generation research notebook](docs/research/worldgen/README.md)
+contains the source studies and compatibility boundaries behind this redesign.
+Tectonic/Terralith retain the underlying landscape and climate; this build
+coordinates a bounded coastal corridor with their output. It does not rescale
+all biomes or continents.
+
+---
+
+# Historical V4 fallback â€” 0.4.0 behavior
 
 A Forge 1.20.1 source project for an additive stony-shore overhaul. The GitHub Actions workflow builds an installable remapped JAR and stores it as a workflow artifact. Do not put the source ZIP into `mods`.
-
-## World generation research
-
-The [world generation research notebook](docs/research/worldgen/README.md) reviews Tectonic, Terralith, Larion, Lithostitched, TerraBlender, BOP, RU, BWG, Geophilic, UltraTerraForged, additional engines, and primary procedural-terrain research. It includes source references, compatibility boundaries, and proposed experiments for natural coastlines, attached arches, shelf overhangs, and tide pools.
-
-Reviewed October 9, 2026, against the [V9 development baseline](https://github.com/JasperPepper25/Stony-Shore-Revival/tree/c61270e946adcf06f57ff60c82d90cb3303271b2). The prototype instructions below describe the V4 code on this branch.
 
 ## What this prototype does
 
@@ -22,7 +49,7 @@ Reviewed October 9, 2026, against the [V9 development baseline](https://github.c
 
 ## Build and use
 
-The `Build Forge mod` GitHub Actions workflow installs Java 17 and Java 25, runs Gradle 9.3.1 on Java 25, and compiles Minecraft 1.20.1 bytecode with the Java 17 toolchain. Its downloadable artifact contains the `-srg.jar` for use in the pack. For a local build, install both JDKs and Gradle 9.3.1, run `gradle clean build`, and use only the `-srg.jar` under `build/libs/`.
+The `Build Forge mod` GitHub Actions workflow installs Java 17 and Java 25, runs Gradle 9.3.1 on Java 25, and compiles Minecraft 1.20.1 bytecode with the Java 17 toolchain. Its downloadable artifact contains the `-srg.jar` for use in the pack. For a local build, install these JDKs, Java 8 for the default Renamer toolchain, and Gradle 9.3.1, run `gradle clean build`, and use only the `-srg.jar` under `build/libs/`.
 
 Use a duplicate ATM9 instance and a backed-up world for the first test; put the built JAR in that instance's `mods` folder on both sides if running a server. The new feature appears **only in newly generated chunks**. In a new creative test world, use `/locate biome minecraft:stony_shore` and compare warm and cold shores from several angles. Turn off shaders for one comparison if block colors are hard to judge.
 

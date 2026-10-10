@@ -1,0 +1,13 @@
+{
+  "type": "lithostitched:wrap_noise_router",
+  "dimension": "minecraft:overworld",
+  "target": "final_density",
+  "priority": 1100,
+  "wrapper_function": {
+    "type": "stonyshorerevival:coastal_density",
+    "input": {
+      "type": "lithostitched:wrapped_marker"
+    },
+    "scale": 0.15
+  }
+}
