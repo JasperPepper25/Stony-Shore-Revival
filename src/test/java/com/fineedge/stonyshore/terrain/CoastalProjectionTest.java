@@ -33,7 +33,7 @@ class CoastalProjectionTest {
                     int z=(int)Math.round(a.z()+v*Math.cos(a.angle()));
                     assertTrue(c.density((x<0?45:110)-y,x,y,z,.15)<0,"passage and both portals stay open");
                 }
-                int roof=(int)Math.ceil(63+a.height()+3);
+                int roof=(int)Math.floor(fin.top(a.x(),a.z()))-2;
                 assertTrue(c.density((45-roof)*.15,a.x(),roof,a.z(),.15)>0);
                 int rootY=100;
                 assertTrue(c.density((110-rootY)*.15,fin.rootX(),rootY,fin.rootZ(),.15)>0,"attachment retains cliff body");
@@ -45,7 +45,7 @@ class CoastalProjectionTest {
         var bare=new CoastalShape(123,63,(x,z)->{
             double mask=x>=96?0:x<0?1-CoastalShape.smooth((-x-36)/20.0):CoastalShape.smooth((96-x)/24.0);
             return new CoastalShape.Ground(x<0?45:110,mask,x,Math.max(0,96-x),110,x<0);
-        },new CoastalShape.Options(false,false,false,true,.65));
+        },new CoastalShape.Options(true,false,false,true,.65));
         for(var a:found)for(int side:new int[]{-1,1}) {
             int x=(int)Math.round(a.x()-side*Math.sin(a.angle())*(a.length()+6));
             int z=(int)Math.round(a.z()+side*Math.cos(a.angle())*(a.length()+6));
@@ -132,7 +132,7 @@ class CoastalProjectionTest {
         var edge=new CoastalShape(123,63,clipped,options);
         var found=arches(full);assertFalse(found.isEmpty());int pastBoundary=0;
         for(var a:found) {
-            int x=a.x(),z=a.z(),y=(int)Math.ceil(63+a.height()+3);
+            int x=a.x(),z=a.z(),y=(int)Math.floor(a.fin().top(a.x(),a.z()))-2;
             if(x>=-8)continue;
             pastBoundary++;
             assertEquals(a,edge.column(x,z).arch(),"region owner carries the complete plan into adjacent ocean");

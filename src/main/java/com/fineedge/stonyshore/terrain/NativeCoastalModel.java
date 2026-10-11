@@ -26,6 +26,11 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
     }
     public NativeCoastalModel(long seed,int sea,int maxY,Terrain baseline,Shore shore,Shore ocean,
                               SurfaceShore surfaceShore,CoastalShape.Options options,Terrain rock,int inlandReach) {
+        this(seed,sea,maxY,baseline,shore,ocean,surfaceShore,options,rock,inlandReach,(x,y,z)->true);
+    }
+    public NativeCoastalModel(long seed,int sea,int maxY,Terrain baseline,Shore shore,Shore ocean,
+                              SurfaceShore surfaceShore,CoastalShape.Options options,Terrain rock,int inlandReach,
+                              CoastalCaves.Allowed caveAllowed) {
         super(seed,sea,baseline,shore,false);this.baseline=rock;this.shore=shore;this.ocean=ocean;
         this.surfaceShore=surfaceShore;
         this.sea=sea;this.maxY=maxY;this.inlandReach=Math.max(48,Math.min(160,inlandReach));
@@ -35,7 +40,7 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
             probes.increment();double density=rock.density(x,y,z);
             if(!Double.isFinite(density))throw new IllegalStateException("Non-finite support density");
             return density>0;
-        });
+        },caveAllowed);
     }
     private int biome(int x,int z) {
         int qx=Math.floorDiv(x,4),qz=Math.floorDiv(z,4);
@@ -106,6 +111,7 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
     }
     public CoastalShape.Column detail(int x,int z) { return shape.column(x,z); }
     public CoastalProfile.Sample profile(int x,int z) { return shape.profile(x,z); }
+    public CoastalCaves.Cave cave(int x,int z) { return shape.cave(x,z); }
     @Override public Column column(int x,int z) {
         var c=detail(x,z);
         return new Column(c.surface(),c.mask()>0 || c.featureInfluence()>0,c.sand(),c.water(),c.original());
@@ -113,12 +119,13 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
     @Override public double cap(double original,int x,int y,int z,double scale) {
         if(y<sea-96 || y>=maxY)return original;
         // Categorical local biome labels never clip a neighboring complete coastal plan.
-        GroundContext c=context(x,z);
-        if(c.mask<=0 && Math.abs(c.distance)>112)return original;
-        return shape.density(original,x,y,z,scale);
+        var g=ground(x,z);
+        if(g.mask()<=0 && Math.abs(g.oceanDistance())>112)return original;
+        return shape.carveCave(shape.density(original,x,y,z,scale),x,y,z,scale);
     }
     @Override public boolean waterCandidate(int x,int y,int z) {
-        return y>=sea-3 && y<maxY && shape.waterCandidate(x,y,z);
+        return y<maxY && ((y>=sea-8 && shape.caveWaterCandidate(x,y,z))
+            || (y>=sea-3 && shape.waterCandidate(x,y,z)));
     }
     @Override public CoastalLandforms.Arch arch(int x,int z) { return detail(x,z).arch(); }
     @Override public CoastalLandforms.Overhang overhang(int x,int z) { return detail(x,z).overhang(); }

@@ -27,6 +27,7 @@ public final class StonyShoreRevival {
     public StonyShoreRevival() {
         IEventBus bus = FMLJavaModLoadingContext.get().getModEventBus();
         FEATURES.register(bus);
+        CoastalBlockRegistry.register(bus);
         com.fineedge.stonyshore.terrain.CoastalDensityRegistry.register(bus);
         MinecraftForge.EVENT_BUS.addListener(ShoreAuditCommand::register);
         MinecraftForge.EVENT_BUS.addListener(com.fineedge.stonyshore.audit.GenerationRecording::loaded);

@@ -1,13 +1,15 @@
 # Terrain rewrite development branch
 
-**0.7.0-terrain.10 coordinates coastal terrain and surface biomes around a physical coastline.**
-One continuous coastal plan guides beaches, shallow seabeds and local biome
-transitions. Arches retain rounded seaward supports, and thick overhangs anchor
-to actual cliff drops. V9's tide-pool shape and placement tuning are retained.
+**0.8.0-terrain.11 develops the V10 coastline from the saved field audit.**
+Cliffs gain coherent tiers and pocket coves; attached arches taper, bend and
+weather, and overhangs blend into deeper buttresses. Supported sea caves and
+shelf caves receive lush or dripstone interiors. Beaches retain their vanilla
+identity and pack vegetation while restoring our pools, boulders and hollow
+logs. A stable sand slab carries sand through half-height coastal steps.
 
-See [installation, changes and test instructions](docs/terrain-test-10.md).
-The [runtime validation report](docs/terrain10-runtime-validation.md) records
-saved biome placement, reopening and generation-order checks.
+See [installation, changes and test instructions](docs/terrain-test-11.md).
+The [V10 runtime validation report](docs/terrain10-runtime-validation.md) is
+historical; the V11 delivery includes its own unit and isolated runtime evidence.
 The supported terrain stack is Tectonic 3.0.17 / Terralith 2.5.4 /
 Lithostitched 1.4.11, Minecraft 1.20.1, sea level 63, without WWOO.
 The surface biome adapter targets TerraBlender 3.0.1.10 when installed.

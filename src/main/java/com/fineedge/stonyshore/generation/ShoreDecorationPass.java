@@ -2,6 +2,7 @@ package com.fineedge.stonyshore.generation;
 
 import com.fineedge.stonyshore.ShoreConfig;
 import com.fineedge.stonyshore.terrain.CoastalTerrainIntegration;
+import com.fineedge.stonyshore.terrain.CoastalBiomeIntegration;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.ChunkPos;
@@ -18,9 +19,10 @@ import static com.fineedge.stonyshore.generation.ShoreMath.*;
 /** Sparse finishing on verified natural surfaces; every write stays in its feature chunk. */
 public final class ShoreDecorationPass {
     private ShoreDecorationPass() {}
-    public static boolean apply(WorldGenLevel world,ChunkPos chunk) {
+    public static boolean apply(WorldGenLevel world,ChunkPos chunk) {return apply(world,chunk,false);}
+    public static boolean apply(WorldGenLevel world,ChunkPos chunk,boolean apronOnly) {
         if(!ShoreConfig.LANDFORMS.get() || !CoastalTerrainIntegration.installed(world.getLevel())) return false;
-        boolean changed=false;
+        boolean changed=SandyPoolPass.apply(world,chunk,apronOnly);
         Block pebble=optionalBlock("twigs:pebble");
         Block log=optionalBlock("quark:hollow_oak_log");
         if(log==null) log=Blocks.STRIPPED_OAK_LOG;
@@ -28,12 +30,12 @@ public final class ShoreDecorationPass {
             int x=chunk.getMinBlockX()+lx,z=chunk.getMinBlockZ()+lz;
             int top=world.getHeight(Heightmap.Types.OCEAN_FLOOR_WG,x,z)-1;
             BlockPos p=new BlockPos(x,top+1,z);
-            if(!world.getBiome(p.below()).is(Biomes.STONY_SHORE)) continue;
+            if(!ownsColumn(world,p.below(),apronOnly)) continue;
             double roll=unit(hash(x+world.getSeed(),739,z));
             if(top>=world.getSeaLevel()-1 && top<=world.getSeaLevel()+5
-                && world.getBlockState(p.below()).is(Blocks.SAND) && world.isEmptyBlock(p)) {
-                if(roll<0.004) changed|=log(world,p,log,unit(hash(x,751,z))<0.5);
-                else if(roll<0.012) changed|=boulder(world,p);
+                && coastalSand(world,p.below()) && world.isEmptyBlock(p)) {
+                if(roll<0.004) changed|=log(world,p,log,unit(hash(x,751,z))<0.5,apronOnly);
+                else if(roll<0.012) changed|=boulder(world,p,apronOnly);
                 else if(roll<0.026) changed|=plant(world,p,Blocks.DEAD_BUSH.defaultBlockState());
                 else if(roll<0.075 && pebble!=null) changed|=plant(world,p,pebble.defaultBlockState());
             }
@@ -75,23 +77,37 @@ public final class ShoreDecorationPass {
         if(!world.isEmptyBlock(p) || !state.canSurvive(world,p)) return false;
         return world.setBlock(p,state,2);
     }
-    private static boolean log(WorldGenLevel world,BlockPos p,Block block,boolean alongX) {
+    static boolean ownsColumn(WorldGenLevel world,BlockPos ground,boolean apronOnly) {
+        if(CoastalBiomeIntegration.protectedBiome(world.getBiome(ground)))return false;
+        boolean stony=world.getBiome(ground).is(Biomes.STONY_SHORE);
+        if(!ownsStoredBiome(stony,apronOnly))return false;
+        var sampler=CoastalTerrainIntegration.sampler(world.getLevel());
+        if(sampler==null)return false;
+        var detail=sampler.detail(ground.getX(),ground.getZ());
+        return detail.mask()>.001 || detail.featureInfluence()>.001;
+    }
+    static boolean ownsStoredBiome(boolean stony,boolean apronOnly) {return stony!=apronOnly;}
+    static boolean coastalSand(WorldGenLevel world,BlockPos ground) {
+        return world.getBlockState(ground).is(Blocks.SAND)
+            && CoastalTerrainIntegration.sandCover(world.getLevel(),ground.getX(),ground.getZ(),ground.getY())>.2;
+    }
+    private static boolean log(WorldGenLevel world,BlockPos p,Block block,boolean alongX,boolean apronOnly) {
         Direction direction=alongX?Direction.EAST:Direction.SOUTH;
         for(int n=0;n<3;n++) {
             BlockPos at=p.relative(direction,n);
-            if(!world.isEmptyBlock(at) || !world.getBlockState(at.below()).is(Blocks.SAND)
-                || !world.getBiome(at).is(Biomes.STONY_SHORE)) return false;
+            if(!world.isEmptyBlock(at) || !coastalSand(world,at.below())
+                || !ownsColumn(world,at.below(),apronOnly)) return false;
         }
         BlockState state=block.defaultBlockState();
         if(state.hasProperty(BlockStateProperties.AXIS)) state=state.setValue(BlockStateProperties.AXIS,alongX?Direction.Axis.X:Direction.Axis.Z);
         for(int n=0;n<3;n++) world.setBlock(p.relative(direction,n),state,2);
         return true;
     }
-    private static boolean boulder(WorldGenLevel world,BlockPos p) {
+    private static boolean boulder(WorldGenLevel world,BlockPos p,boolean apronOnly) {
         // Small uneven talus, validated completely before any writes.
         BlockPos[] footprint={p,p.east(),p.south()};
-        for(BlockPos at:footprint) if(!world.isEmptyBlock(at) || !world.getBlockState(at.below()).is(Blocks.SAND)
-            || !world.getBiome(at).is(Biomes.STONY_SHORE)) return false;
+        for(BlockPos at:footprint) if(!world.isEmptyBlock(at) || !coastalSand(world,at.below())
+            || !ownsColumn(world,at.below(),apronOnly)) return false;
         for(BlockPos at:footprint) world.setBlock(at,unit(hash(at.getX(),at.getY(),at.getZ()))<0.6
             ?Blocks.MOSSY_COBBLESTONE.defaultBlockState():Blocks.ANDESITE.defaultBlockState(),2);
         if(world.isEmptyBlock(p.above()) && unit(hash(p.getX(),773,p.getZ()))<0.35)

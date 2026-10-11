@@ -18,7 +18,12 @@ public final class CoastalShape {
     public record Column(double original,double surface,double mask,double sand,int water,
                          CoastalLandforms.Pool pool,CoastalLandforms.Arch arch,CoastalLandforms.Overhang overhang,
                          double featureInfluence,double terrainSurface) {}
-    public record Options(boolean landforms,boolean pools,boolean arches,boolean beaches,double beachFrequency) {}
+    public record Options(boolean landforms,boolean pools,boolean arches,boolean beaches,double beachFrequency,
+                          boolean tiers,boolean embayments,boolean caves) {
+        public Options(boolean landforms,boolean pools,boolean arches,boolean beaches,double beachFrequency) {
+            this(landforms,pools,arches,beaches,beachFrequency,true,true,true);
+        }
+    }
     @FunctionalInterface public interface GroundSampler { Ground sample(int x,int z); }
     @FunctionalInterface public interface Solid { boolean test(int x,int y,int z); }
     private record Region(List<CoastalLandforms.Pool> pools,CoastalLandforms.Arch arch,CoastalLandforms.Overhang overhang) {}
@@ -33,11 +38,14 @@ public final class CoastalShape {
     private final CoastalProfile profiles;
     private final CoastalBeachProfile beaches;
     private final CoastalPools pools;
+    private final CoastalCaves caves;
+    private final BoundedCache<Long,Boolean> caveFits=new BoundedCache<>(256);
     private final int sea;
     private final Options options;
     private final BoundedCache<Long,Region> rawRegions=new BoundedCache<>(256);
     private final BoundedCache<Long,Region> regions=new BoundedCache<>(256);
     private final BoundedCache<Long,Column> columns=new BoundedCache<>(8192);
+    private final BoundedCache<Long,Boolean> apronSupport=new BoundedCache<>(8192);
     private final ConcurrentHashMap<String,LongAdder> counters=new ConcurrentHashMap<>();
     public CoastalShape(long seed,int sea,GroundSampler ground,Options options) {
         this(seed,sea,ground,options,(x,z)->ground.sample(x,z).height());
@@ -46,19 +54,49 @@ public final class CoastalShape {
         this(seed,sea,ground,options,heights,(x,y,z)->y<ground.sample(x,z).height()+.5);
     }
     public CoastalShape(long seed,int sea,GroundSampler ground,Options options,CoastalProfile.Heights heights,Solid support) {
+        this(seed,sea,ground,options,heights,support,(x,y,z)->true);
+    }
+    public CoastalShape(long seed,int sea,GroundSampler ground,Options options,CoastalProfile.Heights heights,Solid support,
+                        CoastalCaves.Allowed caveAllowed) {
         noise=new CoastalTerrainPlanner(seed);this.sea=sea;this.ground=ground;this.options=options;this.support=support;
         profiles=new CoastalProfile(heights);beaches=new CoastalBeachProfile(sea,noise,options);
         pools=new CoastalPools(noise,sea,ground,this::poolSurface,support);
+        caves=new CoastalCaves(noise,sea,ground,this::poolSurface,support,caveAllowed);
     }
     public CoastalProfile.Sample profile(int x,int z) { return profiles.sample(x,z); }
     private void count(String name) { counters.computeIfAbsent(name,k->new LongAdder()).increment(); }
     public Map<String,Long> stats() {
         Map<String,Long> result=new TreeMap<>();counters.forEach((k,v)->result.put(k,v.sum()));
         pools.stats().forEach((k,v)->result.merge(k,v,Long::sum));
+        caves.stats().forEach((k,v)->result.merge(k,v,Long::sum));
         result.put("regionCacheHits",regions.hits());result.put("regionCacheMisses",regions.misses());
         result.put("columnCacheHits",columns.hits());result.put("columnCacheMisses",columns.misses());return result;
     }
     public Column column(int x,int z) { return columns.get(key(x,z),k->planColumn(x,z)); }
+    public CoastalCaves.Cave cave(int x,int z) {
+        if(!options.landforms() || !options.caves())return null;
+        var cave=caves.cave(x,z);if(cave==null)return null;
+        return caveFits.get(key(cave.x(),cave.z()),k->caveFits(cave))?cave:null;
+    }
+    private boolean caveFits(CoastalCaves.Cave cave) {
+        int cx=Math.floorDiv(cave.x(),48),cz=Math.floorDiv(cave.z(),48);
+        for(int dx=-3;dx<=3;dx++)for(int dz=-3;dz<=3;dz++) {
+            var r=rawRegion(cx+dx,cz+dz);
+            for(var p:r.pools)if(near(cave.centerX(),cave.centerZ(),cave.radius(),p.x(),p.z(),p.footprintRadius()))return false;
+            if(r.arch!=null && near(cave.centerX(),cave.centerZ(),cave.radius(),r.arch.fin().centerX(),r.arch.fin().centerZ(),r.arch.fin().radius()))return false;
+            if(r.overhang!=null && near(cave.centerX(),cave.centerZ(),cave.radius(),r.overhang.ledge().centerX(),r.overhang.ledge().centerZ(),r.overhang.ledge().radius()))return false;
+        }
+        count(cave.flooded()?"seaCavesFitted":"shelfCavesFitted");return true;
+    }
+    public double carveCave(double density,int x,int y,int z,double scale) {
+        var cave=cave(x,z);if(cave==null || y<sea-8)return density;
+        return Math.min(density,cave.opening(x,y,z)*scale);
+    }
+    public boolean caveWaterCandidate(int x,int y,int z) {
+        if(y>=sea || y<sea-8)return false;
+        var cave=cave(x,z);
+        return cave!=null && cave.flooded() && cave.opening(x,y,z)<-.15;
+    }
     public double beachField(int x,int z) {
         return beaches.field(x,z);
     }
@@ -80,7 +118,7 @@ public final class CoastalShape {
         if(options.landforms) {
             int cx=Math.floorDiv(x,48),cz=Math.floorDiv(z,48);
             // Plans travel with their complete volumes across both chunks and region boundaries.
-            for(int dx=-1;dx<=1;dx++)for(int dz=-1;dz<=1;dz++) {
+            for(int dx=-2;dx<=2;dx++)for(int dz=-2;dz<=2;dz++) {
                 Region r=region(cx+dx,cz+dz);
                 for(var p:r.pools) {
                     double amount=g.mask>0?p.influence(x,z,noise):0;
@@ -116,7 +154,8 @@ public final class CoastalShape {
         var accepted=new ArrayList<>(r.pools);
         if(arch==null && accepted.isEmpty() && overhang==null)return r;
         // Whole-footprint arbitration is based on raw plans and never recurses into neighbors.
-        for(int dx=-2;dx<=2;dx++)for(int dz=-2;dz<=2;dz++) {
+        // Conservative circles include root offsets and opposed 66-block fins in coves.
+        for(int dx=-4;dx<=4;dx++)for(int dz=-4;dz<=4;dz++) {
             if(dx==0 && dz==0)continue;
             Region n=rawRegion(cx+dx,cz+dz);boolean prior=dx<0 || (dx==0 && dz<0);
             if(arch!=null && n.arch!=null && prior && intersects(arch,n.arch))arch=null;
@@ -131,6 +170,7 @@ public final class CoastalShape {
         for(var p:accepted) {
             count("poolsAccepted");count(p.water()>sea+4?"elevatedPoolsAccepted":"lowPoolsAccepted");
             count(p.rx()<5?"smallPoolsAccepted":p.rx()<8?"mediumPoolsAccepted":"largePoolsAccepted");
+            if(p.rx()>=12)count("extraLargePoolsAccepted");
         }
         if(overhang!=null)count("overhangsAccepted");
         if(accepted.size()<r.pools.size() || arch!=r.arch || overhang!=r.overhang)count("landformsRejectedOverlap");
@@ -190,27 +230,55 @@ public final class CoastalShape {
             x=root.x;z=root.z;Ground g=root.ground;Facing facing=root.facing;
             if(arch==null && archRegion) {
                 count("archCandidates");
-                double reach=38+8*noise.value(cx,cz,902+salt),thickness=6.5+3*noise.value(cx,cz,903+salt);
-                double openingHeight=Math.min(38,Math.max(22,(g.height-sea)*.55));
-                double crest=Math.max(sea+openingHeight+14,Math.min(g.height+2,sea+82));
+                boolean rockFin=noise.value(cx,cz,906+salt)<.4;
+                double reach=rockFin?46+20*noise.value(cx,cz,902+salt):34+18*noise.value(cx,cz,902+salt);
+                double thickness=rockFin?6+3*noise.value(cx,cz,903+salt):7+4*noise.value(cx,cz,903+salt);
+                double openingHeight=Math.min(44,Math.max(16,(g.height-sea)*(.42+.23*noise.value(cx,cz,907+salt))));
+                double crest=Math.max(sea+openingHeight+14,Math.min(g.height+2,sea+90));
+                double taper=rockFin?.65+.3*noise.value(cx,cz,908+salt):.10+.18*noise.value(cx,cz,908+salt);
+                double phase=noise.value(cx,cz,909+salt)*Math.PI*2;
+                double bend=(noise.value(cx,cz,910+salt)-.5)*4;
+                double weathering=1+.5*noise.value(cx,cz,911+salt);
                 Ground toe=ground.sample(facing.x(x,reach-6),facing.z(z,reach-6));
-                var fin=new CoastalProjection.Fin(x,z,facing.angle,reach,thickness,crest,Math.min(sea-10,toe.height-4));
-                int ax=facing.x(x,reach*.43),az=facing.z(z,reach*.43);
-                // Leave a full-height outer pier before the rounded terminal cap begins.
-                double openingWidth=Math.min(8+4*noise.value(cx,cz,904+salt),reach*.23);
+                var fin=new CoastalProjection.Fin(x,z,facing.angle,reach,thickness,crest,
+                    Math.min(sea-10,toe.height-4),taper,bend,weathering,phase);
+                double openingPosition=reach*(.38+.12*noise.value(cx,cz,912+salt));
+                int ax=facing.x(x,openingPosition),az=facing.z(z,openingPosition);
+                double openingWidth=Math.min(7+5*noise.value(cx,cz,904+salt),reach*.21);
+                // Preserve a solid roof across the passage, including its declining outer side.
+                double roof=Double.POSITIVE_INFINITY;
+                for(int along=-1;along<=1;along++)for(int side=-1;side<=1;side++) {
+                    int px=(int)Math.round(ax+Math.cos(facing.angle)*along*openingWidth*.5-Math.sin(facing.angle)*side*thickness*.5);
+                    int pz=(int)Math.round(az+Math.sin(facing.angle)*along*openingWidth*.5+Math.cos(facing.angle)*side*thickness*.5);
+                    roof=Math.min(roof,fin.top(px,pz));
+                }
+                openingHeight=Math.min(openingHeight,roof-sea-8);
                 var candidate=new CoastalLandforms.Arch(ax,az,facing.angle,openingWidth,
-                    thickness+2,openingHeight,noise.value(cx,cz,905+salt)*1.4-.7,sea,fin);
-                if(attachedArch(candidate)) {arch=candidate;count("archesSupported");}
+                    thickness+3,openingHeight,noise.value(cx,cz,905+salt)*2.6-1.3,sea,fin);
+                if(openingHeight>=14 && attachedArch(candidate)) {
+                    arch=candidate;count("archesSupported");count(rockFin?"rockFinArchesSupported":"roundedArchesSupported");
+                }
                 else count("archesRejectedAttachmentOrPortals");
             }
             if(overhang==null && ledgeRegion) {
                 count("overhangCandidates");
-                double reach=12+8*noise.value(cx,cz,1202+salt),width=10+8*noise.value(cx,cz,1203+salt);
+                double family=noise.value(cx,cz,1204+salt);boolean tinyLip=family<.3;
+                double reach=tinyLip?4+3*noise.value(cx,cz,1202+salt)
+                    :family<.85?10+8*noise.value(cx,cz,1202+salt):18+6*noise.value(cx,cz,1202+salt);
+                double width=tinyLip?6+5*noise.value(cx,cz,1203+salt):10+9*noise.value(cx,cz,1203+salt);
                 double crest=g.height-1;
-                var ledge=new CoastalProjection.Ledge(x,z,facing.angle,reach,width,crest);
-                int hx=facing.x(x,reach*.72),hz=facing.z(z,reach*.72);
-                var candidate=new CoastalLandforms.Overhang(hx,hz,facing.angle-Math.PI/2,width,reach,12,(int)Math.floor(crest-13),ledge);
-                if(attachedLedge(candidate)) {overhang=candidate;count("overhangsSupported");}
+                double rootDepth=tinyLip?6+5*noise.value(cx,cz,1205+salt)
+                    :Math.min(42,Math.max(14,(g.height-sea)*(.35+.18*noise.value(cx,cz,1205+salt))));
+                double tipThickness=tinyLip?1.6+noise.value(cx,cz,1206+salt):3+2*noise.value(cx,cz,1206+salt);
+                double phase=noise.value(cx,cz,1207+salt)*Math.PI*2;
+                var ledge=new CoastalProjection.Ledge(x,z,facing.angle,reach,width,crest,
+                    rootDepth,tipThickness,tinyLip?.35:1.2,phase);
+                int hx=facing.x(x,reach*.78),hz=facing.z(z,reach*.78);
+                var candidate=new CoastalLandforms.Overhang(hx,hz,facing.angle-Math.PI/2,width,reach,
+                    rootDepth+tipThickness,(int)Math.floor(crest-rootDepth-tipThickness),ledge);
+                if(attachedLedge(candidate)) {
+                    overhang=candidate;count("overhangsSupported");count(tinyLip?"smallLipsSupported":"buttressedOverhangsSupported");
+                }
                 else count("overhangsRejectedAttachmentOrFacing");
             }
         }
@@ -261,8 +329,8 @@ public final class CoastalShape {
             int x=(int)Math.round(a.x()-Math.sin(p.direction())*side*p.width()*.35);
             int z=(int)Math.round(a.z()+Math.cos(p.direction())*side*p.width()*.35);
             Ground outer=ground.sample(x,z);
-            if(outer.inlandDistance<4 || outer.oceanDistance< -96 || outer.oceanDistance>root.oceanDistance-5
-                || baseSurface(x,z,outer)>p.underside(x,z)-4)return false;
+            if(outer.inlandDistance<4 || outer.oceanDistance< -96 || outer.oceanDistance>root.oceanDistance-Math.min(5,p.reach()*.45)
+                || baseSurface(x,z,outer)>p.underside(x,z)-Math.min(4,Math.max(1,p.reach()*.18)))return false;
         }
         return true;
     }
@@ -271,21 +339,28 @@ public final class CoastalShape {
         double rough=(noise.noise(x+y*.37,z-y*.21,27,1701)-.5)*.7;
         if(c.pool!=null || c.sand>.5)rough=0;
         double sculpt=(c.terrainSurface+.5-y+rough)*scale;
-        // Ordinary shaping preserves original underground cave air. Validated pools have a bounded liner.
+        // A reconstructed surface is a planning estimate, not proof of rock below it.
+        // Intersect ordinary shaping with the upstream field at every height; replacing
+        // even a shallow band manufactures detached skins on steep cliff/stack edges.
+        // Explicit pool liners and connected low sandy aprons are bounded fill volumes.
         boolean basin=c.pool!=null && c.pool.radius(x,z,noise)<1 && c.terrainSurface<poolSurface(x,z)-.001;
         boolean liner=basin && y<=c.terrainSurface+.5 && y>=c.terrainSurface-2.5;
-        if(!liner && y<c.original-3)sculpt=Math.min(original,sculpt);
+        int apronFloor=Math.max(sea-96,Math.min(sea-32,(int)Math.floor(c.original)-2));
+        boolean apron=c.sand>.5 && c.terrainSurface>c.original && c.terrainSurface<=sea+6
+            && y>=apronFloor && apronSupport.get(key(x,z),k->support.test(x,apronFloor,z));
+        if(!liner && !apron)sculpt=Math.min(original,sculpt);
         double influence=c.pool!=null?1:c.mask;
         double depthFade=smooth((y-(sea-96))/24.0);
         double result=original+influence*depthFade*(sculpt-original);
         if(c.arch!=null) {
             var a=c.arch;double body=a.fin().solid(x,y,z)*scale;
-            // Add the seaward fin above the original terrain; retain existing cave air in its attachment.
-            if(y>=c.original-3)result=Math.max(result,body);
-            if(y>=c.original-3 && a.fin().edge(x,z)>0 && a.fin().solid(x,y,z)>0 && a.opening(x,y,z)<0)
+            // An accepted solid has a complete interior. The smoothed original height
+            // cannot clip that body into a shell; the finite analytic volume bounds it.
+            result=Math.max(result,body);
+            if(body>0 && a.opening(x,y,z)<0)
                 result=Math.min(result,a.opening(x,y,z)*.65);
         }
-        if(c.overhang!=null && y>=c.original-3)
+        if(c.overhang!=null)
             result=Math.max(result,c.overhang.ledge().solid(x,y,z)*scale);
         return result;
     }

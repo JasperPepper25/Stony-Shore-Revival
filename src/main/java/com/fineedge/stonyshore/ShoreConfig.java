@@ -14,6 +14,9 @@ public final class ShoreConfig {
     public static final ForgeConfigSpec.DoubleValue BEACH_FREQUENCY;
     public static final ForgeConfigSpec.BooleanValue LANDFORMS;
     public static final ForgeConfigSpec.BooleanValue ARCHES;
+    public static final ForgeConfigSpec.BooleanValue CLIFF_TIERS;
+    public static final ForgeConfigSpec.BooleanValue EMBAYMENTS;
+    public static final ForgeConfigSpec.BooleanValue CAVES;
     public static final ForgeConfigSpec.BooleanValue POOLS;
     public static final ForgeConfigSpec.BooleanValue SPIRES;
     public static final ForgeConfigSpec.BooleanValue COLD;
@@ -44,6 +47,12 @@ public final class ShoreConfig {
             .define("coastal_landforms", true);
         ARCHES = b.comment("Occasional attached seaward rock arches in suitable headlands. Requires coastal_landforms; restart required.")
             .define("coastal_arches", true);
+        CLIFF_TIERS = b.comment("Broad staggered cliff benches and varied slopes in the physical coastal corridor. Requires coastal_landforms; restart required.")
+            .define("coastal_cliff_tiers", true);
+        EMBAYMENTS = b.comment("Occasional pocket coves that retreat gently into suitable high coasts. Requires coastal_landforms; restart required.")
+            .define("coastal_embayments", true);
+        CAVES = b.comment("Supported sea caves and caves above accessible cliff shelves, with lush or dripstone interiors. Requires coastal_landforms; restart required.")
+            .define("coastal_caves", true);
         POOLS = b.define("tide_pools", true);
         SPIRES = b.define("stone_spires", true);
         POOL_CHANCE = b.comment("Chance to attempt pools in each shore chunk; larger irregular basins are tried first, up to two can succeed.")

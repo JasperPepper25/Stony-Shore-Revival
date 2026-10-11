@@ -16,6 +16,26 @@ class NativeCoastalModelTest {
         assertTrue(model.ground(0,24).mask()>.5);assertEquals(1,model.ground(24,24).mask());
         assertEquals(.2,model.cap(.2,-128,90,24,.15));
     }
+    @Test void deeperCaveWaterDoesNotExpandOrdinaryShorelineAquiferOwnership() {
+        var model=new NativeCoastalModel(99,63,192,(x,y,z)->((x>=0?120:45)-y)*.15,
+            (x,z)->x>=0,(x,z)->x<0,(x,y,z)->x>=0,
+            new CoastalShape.Options(false,false,false,false,0,false,false,false));
+        assertTrue(model.ground(-24,0).mask()>.999);
+        assertNull(model.cave(-24,0));
+        assertTrue(model.waterCandidate(-24,62,0));
+        assertFalse(model.waterCandidate(-24,59,0),"deeper forced water belongs only to accepted cave rooms");
+    }
+    @Test void originalBiomeVetoTravelsThroughTheNativeModelWithoutChangingCoastEligibility() {
+        CoastalColumnSampler.Terrain rock=(x,y,z)->((x>=0?120:45)-y)*.15;
+        var calls=new AtomicInteger();
+        var model=new NativeCoastalModel(99,63,192,rock,(x,z)->x>=0,(x,z)->x<0,(x,y,z)->x>=0,
+            new CoastalShape.Options(true,false,false,false,0,false,false,true),rock,96,
+            (x,y,z)->{calls.incrementAndGet();return false;});
+        assertEquals(1,model.ground(24,0).mask());
+        for(int z=-512;z<=512;z+=4)for(int x=-12;x<48;x+=4)assertNull(model.cave(x,z));
+        assertTrue(calls.get()>0,"validated native rooms must reach the protected-volume predicate");
+        assertTrue(model.column(24,0).active(),"cave protection does not suppress ordinary coastal terrain");
+    }
     @Test void doesNotQuerySubterraneanBiomesForTheSurfaceFootprint() {
         var queries=new AtomicInteger();
         var model=new NativeCoastalModel(42,63,192,(x,y,z)->((x>=0?110:45)-y)*.15,(x,z)->x>=0,(x,z)->x<0,

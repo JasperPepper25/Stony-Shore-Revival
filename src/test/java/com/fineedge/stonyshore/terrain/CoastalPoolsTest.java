@@ -83,4 +83,25 @@ class CoastalPoolsTest {
         for(int x=3;x>=-3;x--)for(int z=3;z>=-3;z--)reverse.plan(x,z);
         for(int x=-3;x<=3;x++)for(int z=-3;z<=3;z++)assertEquals(forward.plan(x,z),reverse.plan(x,z));
     }
+
+    @Test void rareExtraLargeBasinsFitBroadElevatedShelvesAndKeepExistingClasses() {
+        boolean small=false,medium=false,large=false,extraLarge=false;
+        for(int seed=0;seed<200;seed++) {
+            var elevated=flat(seed,110,(x,y,z)->y<110.5);
+            for(var p:elevated.plan(-1,2)) {
+                small|=p.rx()<5;medium|=p.rx()>=5 && p.rx()<8;
+                large|=p.rx()>=8 && p.rx()<12;extraLarge|=p.rx()>=12;
+                if(p.rx()>=12) {
+                    assertTrue(p.rz()>=9 && p.rx()<=17 && p.rz()<=14);
+                    int wet=0;var noise=new CoastalTerrainPlanner(seed);
+                    for(int x=p.x()-22;x<=p.x()+22;x++)for(int z=p.z()-22;z<=p.z()+22;z++)
+                        if(p.wetAt(x,z,110,noise))wet++;
+                    assertTrue(wet>150,"large pools have a broad shallow wet core");
+                }
+            }
+            for(var p:flat(seed,65,(x,y,z)->y<65.5).plan(-1,2))assertTrue(p.rx()<12,
+                "the new upper-tail size is reserved for elevated shelves");
+        }
+        assertTrue(small && medium && large && extraLarge);
+    }
 }

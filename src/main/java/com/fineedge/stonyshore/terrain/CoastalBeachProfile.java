@@ -7,9 +7,11 @@ public final class CoastalBeachProfile {
     private final int sea;
     private final CoastalTerrainPlanner noise;
     private final CoastalShape.Options options;
+    private final CoastalMorphology morphology;
 
     public CoastalBeachProfile(int sea,CoastalTerrainPlanner noise,CoastalShape.Options options) {
         this.sea=sea;this.noise=noise;this.options=options;
+        morphology=new CoastalMorphology(noise,sea);
     }
     private double warpedX(int x,int z) { return x+14*(noise.noise(x,z,96,1621)-.5); }
     private double warpedZ(int x,int z) { return z+14*(noise.noise(x,z,89,1627)-.5); }
@@ -24,6 +26,9 @@ public final class CoastalBeachProfile {
         double wx=warpedX(x,z),wz=warpedZ(x,z);
         double height=g.height(),field=field(x,z);
         double signed=g.oceanDistance()+2.8*(noise.noise(wx,wz,54,1633)-.5);
+        double retreat=options.landforms() && options.embayments()?morphology.retreat(x,z):0;
+        double bayZone=smooth((g.oceanDistance()+24)/18)*(1-smooth((g.oceanDistance()-42)/20));
+        signed-=retreat*bayZone;
         double landWidth=8+10*noise.noise(wx,wz,83,1637);
         double dryWidth=4+6*noise.noise(wx,wz,97,1639);
         // One profile spans dry land, the waterline and seabed. A biome label or a
@@ -33,6 +38,9 @@ public final class CoastalBeachProfile {
         double offshore=smooth(-g.oceanDistance()/8);
         double elevated=1-offshore*smooth((height-(sea+4))/8);
         double beach=field*land*outer*elevated;
+        // A pocket bay brings its beach around the recessed headland, while the outer
+        // shallow apron and distant waterline preserve their original V10 profile.
+        beach=Math.max(beach,smooth(retreat/16)*bayZone*land*outer*elevated);
         double submerged=Math.max(0,-signed-dryWidth);
         double bench=sea+1.35+Math.min(Math.max(0,signed),landWidth)*.045
             -.11*submerged-.004*submerged*submerged
@@ -40,7 +48,8 @@ public final class CoastalBeachProfile {
         // The cliff body remains behind a narrow toe. The offshore apron approaches
         // the original floor over its outer third with zero transition slope.
         double weather=(noise.noise(wx,wz,67,1649)-.5)*1.25*(1-offshore);
-        double retained=height+weather*smooth((height-sea)/6);
+        double retained=(options.landforms() && options.tiers()?morphology.surface(x,z,g):height)
+            +weather*smooth((height-sea)/6);
         double surface=retained+beach*(bench-retained);
         double heightGate=1-smooth((surface-(sea+3))/6);
         double depthGate=1-smooth((sea-12-surface)/16);

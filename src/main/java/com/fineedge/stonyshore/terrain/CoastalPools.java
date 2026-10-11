@@ -43,9 +43,12 @@ public final class CoastalPools {
             if(slope>.45)continue;
             count("poolCandidates");
             double size=noise.value(cx,cz,1403+salt),rx,rz;
+            boolean extraLarge=size>=.97 && height>sea+12;
             if(size<.4) {rx=3+1.8*noise.value(cx,cz,1404+salt);rz=2.4+1.6*noise.value(cx,cz,1405+salt);}
             else if(size<.8) {rx=5+2.5*noise.value(cx,cz,1404+salt);rz=4+2*noise.value(cx,cz,1405+salt);}
+            else if(extraLarge) {rx=12+5*noise.value(cx,cz,1404+salt);rz=9+5*noise.value(cx,cz,1405+salt);}
             else {rx=8+3.5*noise.value(cx,cz,1404+salt);rz=6+3.5*noise.value(cx,cz,1405+salt);}
+            if(extraLarge)count("extraLargePoolCandidates");
             int depth=1+(int)(noise.value(cx,cz,1407+salt)*(size<.4?2:3));
             int water=Math.max(sea,(int)Math.floor(height-.2));
             var p=new CoastalLandforms.Pool(x,z,rx,rz,noise.value(cx,cz,1406+salt)*Math.PI,
@@ -56,6 +59,7 @@ public final class CoastalPools {
             if(!contained(p)) {count("poolsRejectedTerraceOrSupport");continue;}
             pools.add(p);count("poolsSupported");
             count(size<.4?"smallPoolsSupported":size<.8?"mediumPoolsSupported":"largePoolsSupported");
+            if(extraLarge)count("extraLargePoolsSupported");
         }
         return List.copyOf(pools);
     }

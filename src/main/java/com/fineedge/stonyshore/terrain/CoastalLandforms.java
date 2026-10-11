@@ -39,6 +39,15 @@ public final class CoastalLandforms {
         public double opening(int px,int y,int pz) {
             double yy=(y-(sea+height*0.43))/(height*0.57);
             double uu=(u(px,pz)-lean*(yy+0.4))/width;
+            if(fin!=null && (fin.taper()!=0 || fin.bend()!=0 || fin.roughness()!=0)) {
+                double phase=fin.phase(),through=v(px,pz)/Math.max(1,length);
+                // Large-scale asymmetry changes the silhouette while the whole passage remains connected.
+                uu-=.06*Math.sin(yy*2.1+phase)+.025*Math.sin(through*2.3-phase*.7);
+                double side=uu<0?1+.07*Math.sin(phase+yy*1.7):1-.06*Math.cos(phase*.7-yy*1.3);
+                double irregular=1+.05*Math.sin(yy*3.2+through*.8+phase)
+                    +.025*Math.sin(yy*5.7-through*1.3-phase*.4);
+                return Math.max(Math.hypot(uu/side,yy)-irregular,Math.abs(through)-1);
+            }
             double irregular=1+0.08*Math.sin(v(px,pz)*0.41+yy*2.7);
             return Math.max(Math.hypot(uu,yy)-irregular,Math.abs(v(px,pz))/length-1);
         }

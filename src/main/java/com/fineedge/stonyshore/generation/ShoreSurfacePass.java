@@ -63,10 +63,14 @@ public final class ShoreSurfacePass {
                     // Terrain Slabs can finish before this pass; recolor its generated slab
                     // along with the supporting beach instead of rejecting the whole cap.
                     BlockState slab=world.getBlockState(surface);
-                    BlockPos floor=BeachMaterials.generatedStoneSlab(slab) ? surface.below() : surface;
+                    BlockPos floor=BeachMaterials.naturalTerrainSlab(slab) ? surface.below() : surface;
                     beachFloor=floor.getY();
                     beachCap=sandCap(world,floor,CoastalTerrainIntegration.sandCover(world.getLevel(),x,z,beachFloor));
                     any |= beachCap;
+                    // Ore/disk finishing can reset Terrain Slabs' generated flag, and top
+                    // halves may sit underneath a sand step. Repair the visible shallow
+                    // edge too, preserving its geometry even when a full cap cannot fit.
+                    any |= recolorBeachSlabs(world,surface);
                 }
                 // Attached ocean rock bodies share the shore palette without relabelling biomes.
                 if(apronOnly && ocean && !oceanRock) continue;
@@ -144,26 +148,22 @@ public final class ShoreSurfacePass {
         int sea=world.getSeaLevel();
         if(coverage<=0) return false;
         BlockState above=world.getBlockState(surface.above());
-        if(!above.isAir() && above.getFluidState().isEmpty() && !BeachMaterials.generatedStoneSlab(above)
+        if(!above.isAir() && above.getFluidState().isEmpty() && !BeachMaterials.naturalTerrainSlab(above)
             && !above.canBeReplaced()) return false;
-        double upper=Math.max(0,Math.min(1,(surface.getY()-(sea+2))/4.0));
-        coverage*=1-upper*upper*(3-2*upper);
         // A continuous field keeps the beach edge irregular without producing
         // independent, one-block teeth at the waterline or across chunk borders.
-        int shift=(int)(world.getSeed() ^ (world.getSeed() >>> 32));
-        double edge=valueNoise(surface.getX()+shift,surface.getZ()-shift,7);
-        if(coverage<0.82 && edge>=coverage) return false;
+        if(!beachCoverageAt(surface.getX(),surface.getY(),surface.getZ(),sea,world.getSeed(),coverage)) return false;
         if(!isSandSubstrate(world.getBlockState(surface))
             || !isSandSubstrate(world.getBlockState(surface.below()))
             || !isSandSubstrate(world.getBlockState(surface.below(2)))) return false;
         // Replace supported material only. The sea-floor may be covered by aquatic plants.
         if(!world.getBlockState(surface.below(3)).isFaceSturdy(world,surface.below(3),net.minecraft.core.Direction.UP)) return false;
         boolean sand=beachSandAt(surface.getX(),surface.getZ(),world.getSeed());
-        world.setBlock(surface.below(2),(sand?Blocks.SANDSTONE:Blocks.STONE).defaultBlockState(),2);
-        world.setBlock(surface.below(),(sand?Blocks.SAND:Blocks.STONE).defaultBlockState(),2);
-        world.setBlock(surface,(sand?Blocks.SAND:Blocks.STONE).defaultBlockState(),2);
-        if(BeachMaterials.generatedStoneSlab(above)) {
-            Block capSlab=optionalBlock(sand?"terrain_slabs:sand_slab":"terrain_slabs:terrain_stone_slab");
+        beachMaterial(world,surface.below(2),sand?Blocks.SANDSTONE:Blocks.STONE,sand);
+        beachMaterial(world,surface.below(),sand?Blocks.SAND:Blocks.STONE,sand);
+        beachMaterial(world,surface,sand?Blocks.SAND:Blocks.STONE,sand);
+        if(BeachMaterials.naturalTerrainSlab(above)) {
+            Block capSlab=sand?BeachMaterials.sandSlab():optionalBlock("terrain_slabs:terrain_stone_slab");
             if(capSlab!=null) world.setBlock(surface.above(),BeachMaterials.copySlab(above,capSlab),2);
         } else {
             // The material pass follows vegetation placement; remove only plants whose new
@@ -176,6 +176,41 @@ public final class ShoreSurfacePass {
         }
         return true;
     }
+    private static void beachMaterial(WorldGenLevel world,BlockPos at,Block material,boolean sand) {
+        BlockState old=world.getBlockState(at);
+        if(BeachMaterials.naturalTerrainSlab(old)) {
+            Block slab=sand?BeachMaterials.sandSlab():optionalBlock("terrain_slabs:terrain_stone_slab");
+            if(slab!=null)world.setBlock(at,BeachMaterials.copySlab(old,slab),2);
+        } else world.setBlock(at,material.defaultBlockState(),2);
+    }
+    private static boolean recolorBeachSlabs(WorldGenLevel world,BlockPos top) {
+        boolean changed=false;
+        for(int dy=0;dy<=3;dy++) {
+            BlockPos at=top.below(dy);BlockState old=world.getBlockState(at);
+            if(!BeachMaterials.naturalTerrainSlab(old))continue;
+            double coverage=CoastalTerrainIntegration.sandCover(world.getLevel(),at.getX(),at.getZ(),at.getY());
+            if(!beachCoverageAt(at.getX(),at.getY(),at.getZ(),world.getSeaLevel(),world.getSeed(),coverage)
+                || !beachSandAt(at.getX(),at.getZ(),world.getSeed()))continue;
+            // A lost generated flag is accepted only next to this column's completed sand
+            // cap. This uses no neighboring chunk's feature state, so order cannot matter.
+            boolean sandContext=false;
+            for(int n=-3;n<=3;n++)if(n!=0) {
+                BlockState neighbor=world.getBlockState(at.above(n));
+                sandContext|=neighbor.is(Blocks.SAND) || neighbor.is(Blocks.SANDSTONE);
+            }
+            if(!BeachMaterials.generatedTerrainSlab(old) && !sandContext)continue;
+            BlockState next=BeachMaterials.copySlab(old,BeachMaterials.sandSlab());
+            if(!next.equals(old))changed|=world.setBlock(at,next,2);
+        }
+        return changed;
+    }
+    static boolean beachCoverageAt(int x,int y,int z,int sea,long seed,double coverage) {
+        if(coverage<=0 || y<sea-28 || y>sea+6)return false;
+        double upper=Math.max(0,Math.min(1,(y-(sea+2))/4.0));
+        coverage*=1-upper*upper*(3-2*upper);
+        int shift=(int)(seed ^ (seed >>> 32));
+        return coverage>=.82 || valueNoise(x+shift,z-shift,7)<coverage;
+    }
     static boolean beachSandAt(int x,int z,long seed) {
         int shift=(int)(seed ^ (seed >>> 32));
         // Sparse connected stone outcrops; the remaining designated footprint is sandy.
@@ -183,7 +218,7 @@ public final class ShoreSurfacePass {
     }
     static boolean isSandSubstrate(BlockState state) {
         return !state.hasBlockEntity() && !state.is(net.minecraftforge.common.Tags.Blocks.ORES)
-            && (isSourceStone(state) || state.is(Blocks.SAND) || state.is(Blocks.SANDSTONE)
+            && (BeachMaterials.naturalTerrainSlab(state) || isSourceStone(state) || state.is(Blocks.SAND) || state.is(Blocks.SANDSTONE)
             || state.is(Blocks.GRAVEL) || state.is(Blocks.COBBLESTONE) || state.is(Blocks.MOSSY_COBBLESTONE)
             || state.is(Blocks.TUFF) || state.is(Blocks.GRASS_BLOCK) || state.is(Blocks.DIRT)
             || state.is(Blocks.COARSE_DIRT) || state.is(Blocks.ROOTED_DIRT) || state.is(Blocks.PODZOL)

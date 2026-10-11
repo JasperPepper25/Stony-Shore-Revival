@@ -64,9 +64,11 @@ public final class CoastalTerrainIntegration {
             (x,z) -> surfaceBiome(source,surfaceSampler,x,z).is(BiomeTags.IS_OCEAN),
             (x,y,z) -> CoastalBiomeIntegration.rocky(CoastalBiomeIntegration.original(source,sampler,x,y,z),rockyBiomes),
             new CoastalShape.Options(ShoreConfig.LANDFORMS.get(),ShoreConfig.POOLS.get(),ShoreConfig.ARCHES.get(),
-                ShoreConfig.SANDY_SHELVES.get(),ShoreConfig.BEACH_FREQUENCY.get()),
+                ShoreConfig.SANDY_SHELVES.get(),ShoreConfig.BEACH_FREQUENCY.get(),
+                ShoreConfig.CLIFF_TIERS.get(),ShoreConfig.EMBAYMENTS.get(),ShoreConfig.CAVES.get()),
             (x,y,z)->finalNodes.get(0).input().compute(new DensityFunction.SinglePointContext(x,y,z)),
-            ShoreConfig.COASTAL_INLAND_WIDTH.get());
+            ShoreConfig.COASTAL_INLAND_WIDTH.get(),
+            (x,y,z)->!CoastalBiomeIntegration.protectedBiome(CoastalBiomeIntegration.original(source,sampler,x,y,z)));
         finalNodes.forEach(node -> node.bind(columns,failed));
         initialNodes.forEach(node -> node.bind(columns,failed));
         String biomeReason = !ShoreConfig.COASTAL_BIOMES.get() ? "disabled by config"
@@ -191,6 +193,11 @@ public final class CoastalTerrainIntegration {
         State state=STATES.get(level);
         if(state!=null && state.failed().compareAndSet(false,true)) LogUtils.getLogger().error("Coastal landform sampling disabled",ex);
     }
+    public static CoastalCaves.Cave cave(ServerLevel level,int x,int z) {
+        var sampler=sampler(level);if(sampler==null)return null;
+        try { return sampler.cave(x,z); }
+        catch(RuntimeException ex) {disable(level,ex);return null;}
+    }
     public static DensityFunction baselineFinal(ServerLevel level) {
         State state=STATES.get(level);return state==null?null:state.baselineFinal();
     }
@@ -200,9 +207,10 @@ public final class CoastalTerrainIntegration {
         result.addProperty("adapter", "lithostitched-1.4.11-preseed-native-density");
         result.addProperty("injectionPriority",1100);
         result.addProperty("runtimeRouterReplacement",false);
-        result.addProperty("densityConstruction","continuous physical coastal corridor; unmodified terrain support; cliff-preserving beach and seabed profile; attached seaward rock volumes");
+        result.addProperty("densityConstruction","upstream density intersection; connected sandy aprons; solid attached weathered rock volumes; staggered cliffs and pocket coves");
         result.addProperty("oceanTerrainReachBlocks",CoastalBeachProfile.OCEAN_REACH);
-        result.addProperty("poolConstruction","terrace-fitted irregular basins; up to two per planning region; validated wet area and floor");
+        result.addProperty("poolConstruction","terrace-fitted irregular basins; rare extra-large elevated basins; up to two per region; validated wet area and floor");
+        result.addProperty("caveConstruction","bounded supported blind rooms; sea-connected flooded mouths or existing shelf access; lush/dripstone interiors");
         result.addProperty("inlandTransitionWidthBlocks",ShoreConfig.COASTAL_INLAND_WIDTH.get());
         result.addProperty("quarkStoneExclusion","per-destination jasper/shale/limestone in shore biome or shore surface columns; optional Quark mixin");
         result.addProperty("quarkGeneratorsObserved",com.fineedge.stonyshore.generation.QuarkStonePolicy.generatorsObserved());
@@ -215,6 +223,9 @@ public final class CoastalTerrainIntegration {
             CoastalBiomeIntegration.status(result,source,level.getChunkSource().randomState().sampler());
         result.addProperty("regionalLandforms", ShoreConfig.LANDFORMS.get());
         result.addProperty("coastalArches", ShoreConfig.ARCHES.get());
+        result.addProperty("coastalCliffTiers", ShoreConfig.CLIFF_TIERS.get());
+        result.addProperty("coastalEmbayments", ShoreConfig.EMBAYMENTS.get());
+        result.addProperty("coastalCaves", ShoreConfig.CAVES.get());
         result.addProperty("status", state == null ? "not applicable / not initialized" : state.reason());
         if (state != null) {
             result.addProperty("samplingFailed", state.failed().get());

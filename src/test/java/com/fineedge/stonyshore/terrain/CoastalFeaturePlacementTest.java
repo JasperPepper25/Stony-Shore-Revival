@@ -52,8 +52,12 @@ class CoastalFeaturePlacementTest {
                 int extent=(int)Math.ceil(Math.max(p.rx(),p.rz())*3+6);
                 while(!queue.isEmpty()) {
                     int[] point=queue.remove();int x=point[0],z=point[1];
-                    if(!visited.add(CoastalShape.key(x,z)) || coast.density(.46,x,p.water()-1,z,.15)>0)continue;
-                    assertTrue(Math.abs(x-p.x())<extent && Math.abs(z-p.z())<extent,"pool water must be enclosed by a solid rim");
+                    // Partial masks blend against the actual upstream height. A fixed
+                    // shallow density would invent an open rim after macro cliff lowering.
+                    double original=(height-(p.water()-1))*.15;
+                    if(!visited.add(CoastalShape.key(x,z)) || coast.density(original,x,p.water()-1,z,.15)>0)continue;
+                    assertTrue(Math.abs(x-p.x())<extent && Math.abs(z-p.z())<extent,
+                        "pool water must be enclosed by a solid rim: "+p+" escaped at "+x+","+z+" column="+coast.column(x,z));
                     queue.add(new int[]{x+1,z});queue.add(new int[]{x-1,z});queue.add(new int[]{x,z+1});queue.add(new int[]{x,z-1});
                 }
             }

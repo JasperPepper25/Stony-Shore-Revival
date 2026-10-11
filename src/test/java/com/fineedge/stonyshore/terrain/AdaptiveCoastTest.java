@@ -16,7 +16,9 @@ class AdaptiveCoastTest {
         }
     }
     @Test void beachesCannotFlattenTallInlandCliffs() {
-        var coast=coast(130,48);
+        // Isolate the beach profile: cliff tiers and deliberate pocket coves are separate changes.
+        var coast=new CoastalShape(123,63,(x,z)->new CoastalShape.Ground(130,1,48),
+            new CoastalShape.Options(true,true,true,true,.65,false,false,false));
         for(int x=-96;x<=96;x+=8)for(int z=-96;z<=96;z+=8) {
             var c=coast.column(x,z);assertTrue(c.surface()>105,"tall coast retains most original relief");
             assertEquals(0,c.sand(),1e-9);
