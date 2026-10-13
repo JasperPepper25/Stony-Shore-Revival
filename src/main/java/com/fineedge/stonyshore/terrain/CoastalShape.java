@@ -70,7 +70,8 @@ public final class CoastalShape {
         pools.stats().forEach((k,v)->result.merge(k,v,Long::sum));
         caves.stats().forEach((k,v)->result.merge(k,v,Long::sum));
         result.put("regionCacheHits",regions.hits());result.put("regionCacheMisses",regions.misses());
-        result.put("columnCacheHits",columns.hits());result.put("columnCacheMisses",columns.misses());return result;
+        result.put("columnCacheHits",columns.hits());result.put("columnCacheMisses",columns.misses());
+        result.put("columnCacheRecentHits",columns.recentHits());return result;
     }
     public Column column(int x,int z) { return columns.get(key(x,z),k->planColumn(x,z)); }
     public CoastalCaves.Cave cave(int x,int z) {

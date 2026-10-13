@@ -5,6 +5,26 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 
 class NativeCoastalModelTest {
+    @Test void reusesHeightStencilWithoutChangingInterpolationOrSharingWorldValues() {
+        var model=new NativeCoastalModel(42,63,192,(x,y,z)->(110+4*Math.sin(x*.03)+3*Math.cos(z*.04)-y)*.15,
+            (x,z)->true,(x,z)->false,(x,y,z)->true,new CoastalShape.Options(false,false,false,false,0));
+        var reference=new NativeCoastalModel(42,63,192,(x,y,z)->(110+4*Math.sin(x*.03)+3*Math.cos(z*.04)-y)*.15,
+            (x,z)->true,(x,z)->false,(x,y,z)->true,new CoastalShape.Options(false,false,false,false,0));
+        for(int x=-17;x<=17;x++)for(int z=-17;z<=17;z++) {
+            reference.originalHeight(x+1024,z+1024); // Force a fresh stencil for every comparison.
+            assertEquals(Double.doubleToLongBits(reference.originalHeight(x,z)),
+                Double.doubleToLongBits(model.originalHeight(x,z)));
+        }
+        assertTrue(model.landformStats().get("heightCellReuseHits")>0);
+        long hits=model.landformStats().get("heightCacheHits"),misses=model.landformStats().get("heightCacheMisses");
+        model.originalHeight(16,16); // The final cell in the traversal is still current.
+        assertEquals(hits,model.landformStats().get("heightCacheHits").longValue());
+        assertEquals(misses,model.landformStats().get("heightCacheMisses").longValue());
+        var otherWorld=new NativeCoastalModel(42,63,192,(x,y,z)->(45-y)*.15,
+            (x,z)->false,(x,z)->true,(x,y,z)->false,new CoastalShape.Options(false,false,false,false,0));
+        assertEquals(44.5,otherWorld.originalHeight(16,16));
+        assertNotEquals(otherWorld.originalHeight(16,16),model.originalHeight(16,16));
+    }
     @Test void heightGridCachesProbesAndBiomeBoundaryIncludesOcean() {
         var probes=new AtomicInteger();
         var model=new NativeCoastalModel(42,63,192,(x,y,z)->{probes.incrementAndGet();return ((x>=0?110:45)-y)*.15;},

@@ -15,6 +15,11 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
     private final BoundedCache<Long,Double> heights=new BoundedCache<>(16384);
     private final BoundedCache<Long,Integer> biomes=new BoundedCache<>(16384);
     private final BoundedCache<Long,CoastalShape.Ground> grounds=new BoundedCache<>(8192);
+    // One immutable 4x4 lattice per worker, not a second growing height/column map.
+    // Static records hold no model/world references after a worker changes worlds.
+    private record HeightCell(int x,int z,double[] nodes) {}
+    private final ThreadLocal<HeightCell> lastHeightCell=new ThreadLocal<>();
+    private final LongAdder heightCellReuse=new LongAdder();
     private final LongAdder probes=new LongAdder(),planningNanos=new LongAdder(),water=new LongAdder(),aquifers=new LongAdder();
     public NativeCoastalModel(long seed,int sea,int maxY,Terrain baseline,Shore shore,Shore ocean,
                               SurfaceShore surfaceShore,CoastalShape.Options options) {
@@ -80,13 +85,25 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
     public double originalHeight(int x,int z) {
         int gx=Math.floorDiv(x,16)*16,gz=Math.floorDiv(z,16)*16;
         double fx=Math.floorMod(x,16)/16.0,fz=Math.floorMod(z,16)/16.0;
-        double[] rows=new double[4];
-        for(int i=0;i<4;i++) {
-            int nz=gz+(i-1)*16;
-            rows[i]=CoastalInterpolation.cubic(heightNode(gx-16,nz),heightNode(gx,nz),
-                heightNode(gx+16,nz),heightNode(gx+32,nz),fx);
+        HeightCell cell=lastHeightCell.get();
+        if(cell==null || cell.x()!=gx || cell.z()!=gz) {
+            double[] nodes=new double[16];
+            for(int i=0;i<4;i++) {
+                int nz=gz+(i-1)*16;
+                for(int j=0;j<4;j++)nodes[i*4+j]=heightNode(gx+(j-1)*16,nz);
+            }
+            // Publish only a complete stencil. Nested sampling cannot mutate a cell
+            // that an outer call is currently interpolating.
+            cell=new HeightCell(gx,gz,nodes);lastHeightCell.set(cell);
+        } else {
+            heightCellReuse.increment();
         }
-        return CoastalInterpolation.cubic(rows[0],rows[1],rows[2],rows[3],fz);
+        double[] n=cell.nodes();
+        double a=CoastalInterpolation.cubic(n[0],n[1],n[2],n[3],fx);
+        double b=CoastalInterpolation.cubic(n[4],n[5],n[6],n[7],fx);
+        double c=CoastalInterpolation.cubic(n[8],n[9],n[10],n[11],fx);
+        double d=CoastalInterpolation.cubic(n[12],n[13],n[14],n[15],fx);
+        return CoastalInterpolation.cubic(a,b,c,d,fz);
     }
     /** Predicates describe surface climate, not the biome in a cave at sea level. */
     public boolean shoreColumn(int x,int z) {
@@ -146,7 +163,9 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
     @Override public Map<String,Long> landformStats() {
         var s=new TreeMap<>(shape.stats());s.put("baselineDensityProbes",probes.sum());
         s.put("heightCacheHits",heights.hits());s.put("heightCacheMisses",heights.misses());
+        s.put("heightCellReuseHits",heightCellReuse.sum());s.put("heightCacheRecentHits",heights.recentHits());
         s.put("groundCacheHits",grounds.hits());s.put("groundCacheMisses",grounds.misses());
+        s.put("groundCacheRecentHits",grounds.recentHits());
         s.put("biomeClassificationCacheHits",biomes.hits());s.put("biomeClassificationCacheMisses",biomes.misses());
         s.putAll(coast.stats());
         s.put("groundPlanningNanos",planningNanos.sum());return s;

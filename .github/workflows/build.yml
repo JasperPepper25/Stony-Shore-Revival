@@ -2,9 +2,9 @@ name: Build Forge mod
 
 on:
   push:
-    branches: [main]
+    branches: [main, terrain-rewrite]
   pull_request:
-    branches: [main]
+    branches: [main, terrain-rewrite]
   workflow_dispatch:
 
 permissions:
