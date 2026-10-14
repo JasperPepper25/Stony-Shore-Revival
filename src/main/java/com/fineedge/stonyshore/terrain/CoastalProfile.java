@@ -13,7 +13,7 @@ public final class CoastalProfile {
         public String type(int sea) { return cliffWeight(sea)>.65?"cliff":lowWeight(sea)>.65?"low":"mixed"; }
     }
     private final Heights heights;
-    private final BoundedCache<Long,Sample> nodes=new BoundedCache<>(4096);
+    private final BoundedLongCache<Sample> nodes=new BoundedLongCache<>(4096);
     public CoastalProfile(Heights heights) { this.heights=heights; }
     private Sample node(int x,int z) {
         return nodes.get(CoastalShape.key(x,z),k->{

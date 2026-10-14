@@ -10,6 +10,7 @@ import net.minecraft.SharedConstants;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.QuartPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.server.Bootstrap;
@@ -39,7 +40,10 @@ class CoastalBiomeIntegrationTest {
                            Holder<Biome> plain, Holder<Biome> stone, Holder<Biome> cave,
                            Climate.Sampler sampler, NativeCoastalModel model) {}
     private static Biome biome() {
-        return new Biome.BiomeBuilder().hasPrecipitation(true).temperature(.7F).downfall(.5F)
+        return biome(.7F);
+    }
+    private static Biome biome(float temperature) {
+        return new Biome.BiomeBuilder().hasPrecipitation(true).temperature(temperature).downfall(.5F)
             .specialEffects(new BiomeSpecialEffects.Builder().fogColor(0).waterColor(0).waterFogColor(0).skyColor(0).build())
             .mobSpawnSettings(MobSpawnSettings.EMPTY).generationSettings(BiomeGenerationSettings.EMPTY).build();
     }
@@ -250,6 +254,74 @@ class CoastalBiomeIntegrationTest {
             assertSame(delegate,CoastalBiomeIntegration.coordinateFill(f.source,otherWorld,delegate));
             var status=new JsonObject();CoastalBiomeIntegration.status(status,f.source,f.sampler);
             assertFalse(status.get("biomeFillHookObserved").getAsBoolean());
+        } finally {CoastalBiomeIntegration.unbind(f.source,f.sampler);}
+    }
+    @Test void verticalQueriesReuseHorizontalPolicyWithoutMoreGroundPlanning() {
+        var f=fixture(true);
+        try {
+            bind(f);
+            assertSame(f.stone,CoastalBiomeIntegration.adjust(f.source,f.sampler,8,27,0,f.plain));
+            var before=f.model.landformStats();
+            for(int qy=14;qy<48;qy++)CoastalBiomeIntegration.adjust(f.source,f.sampler,8,qy,0,f.plain);
+            var after=f.model.landformStats();
+            assertEquals(before.get("groundCacheMisses"),after.get("groundCacheMisses"));
+            assertEquals(before.get("groundCacheHits"),after.get("groundCacheHits"));
+            var status=new JsonObject();CoastalBiomeIntegration.status(status,f.source,f.sampler);
+            assertEquals(1,status.get("biomeColumnPolicyCacheMisses").getAsLong());
+            assertEquals(34,status.get("biomeColumnPolicyCacheHits").getAsLong());
+        } finally {CoastalBiomeIntegration.unbind(f.source,f.sampler);}
+    }
+    @Test void reusedGeometryStillRespectsChangingTemperatureAndProtectedOriginalBiomes() {
+        var base=fixture(true);
+        var model=new NativeCoastalModel(77,63,192,(x,y,z)->((x>=0?110:45)-y)*.15,
+            (x,z)->x>=0,(x,z)->x<0,(x,y,z)->x>=0,new CoastalShape.Options(false,false,false,true,1));
+        var f=new Fixture(base.source,base.registry,base.plain,base.stone,base.cave,base.sampler,model);
+        int px=0,pz=0;boolean found=false;
+        outer:for(int qx=-6;qx<=4;qx++)for(int qz=-64;qz<=64;qz++) {
+            int x=QuartPos.toBlock(qx)+2,z=QuartPos.toBlock(qz)+2;
+            var g=model.ground(x,z);var c=model.detail(x,z);
+            if(g.mask()>=.55 && c.sand()>.52 && c.surface()>=62.5 && c.surface()<=71) {
+                px=qx;pz=qz;found=true;break outer;
+            }
+        }
+        assertTrue(found,"Fixture must exercise an actual dry sandy coastal plan");
+        var beach=f.registry.getHolderOrThrow(Biomes.BEACH);
+        var cold=Holder.direct(biome(0));
+        try {
+            bind(f);
+            assertSame(beach,CoastalBiomeIntegration.adjust(f.source,f.sampler,px,20,pz,f.plain));
+            assertSame(f.stone,CoastalBiomeIntegration.adjust(f.source,f.sampler,px,20,pz,cold),
+                "Cold query uses the live temperature and the existing missing-snowy-beach fallback");
+            assertSame(f.cave,CoastalBiomeIntegration.adjust(f.source,f.sampler,px,20,pz,f.cave));
+            f.registry.bindTags(Map.of(Tags.Biomes.IS_SNOWY,List.of(f.plain)));
+            assertSame(f.stone,CoastalBiomeIntegration.adjust(f.source,f.sampler,px,20,pz,f.plain));
+            f.registry.bindTags(Map.of(BiomeTags.IS_RIVER,List.of(f.plain)));
+            assertSame(f.plain,CoastalBiomeIntegration.adjust(f.source,f.sampler,px,20,pz,f.plain));
+        } finally {CoastalBiomeIntegration.unbind(f.source,f.sampler);}
+    }
+    @Test void retainedFillResolverFollowsRebindingAndDoesNotReuseThePreviousWorldsPolicy() {
+        var f=fixture(true);
+        try {
+            bind(f);
+            var resolver=CoastalBiomeIntegration.coordinateFill(f.source,f.sampler,(qx,qy,qz,s)->f.plain);
+            assertSame(f.stone,resolver.getNoiseBiome(8,27,0,f.sampler));
+            var outside=new NativeCoastalModel(999,63,192,(x,y,z)->(45-y)*.15,
+                (x,z)->false,(x,z)->true,(x,y,z)->false,new CoastalShape.Options(false,false,false,false,0));
+            assertTrue(CoastalBiomeIntegration.bind(f.source,f.sampler,outside,new AtomicBoolean(),Set.of(),ex->fail(ex)));
+            assertSame(f.plain,resolver.getNoiseBiome(8,27,0,f.sampler));
+            CoastalBiomeIntegration.unbind(f.source,f.sampler);
+            assertSame(f.plain,resolver.getNoiseBiome(8,27,0,f.sampler));
+        } finally {CoastalBiomeIntegration.unbind(f.source,f.sampler);}
+    }
+    @Test void unloadInsideAPositionalDelegateDoesNotApplyItsOldCachedPolicy() {
+        var f=fixture(true);
+        try {
+            bind(f);
+            assertSame(f.plain,CoastalBiomeIntegration.intercept(f.source,f.sampler,8,27,0,()->{
+                CoastalBiomeIntegration.unbind(f.source,f.sampler);return f.plain;
+            }));
+            bind(f);
+            assertSame(f.stone,CoastalBiomeIntegration.intercept(f.source,f.sampler,8,27,0,()->f.plain));
         } finally {CoastalBiomeIntegration.unbind(f.source,f.sampler);}
     }
 }

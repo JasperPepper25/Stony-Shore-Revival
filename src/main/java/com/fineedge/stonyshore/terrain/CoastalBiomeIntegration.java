@@ -27,14 +27,21 @@ import java.util.stream.Collectors;
 
 /** Runtime adapter on the existing source; its codec and possible-biome set are unchanged. */
 public final class CoastalBiomeIntegration {
+    /** Geometry is horizontal; original biome protection/temperature remain per query. */
+    private record ColumnPolicy(CoastalBiomePolicy.Context warm,CoastalBiomePolicy.Context cold) {
+        private static final ColumnPolicy OUTSIDE=new ColumnPolicy(null,null);
+    }
+    private static final class DelegateState { int depth; }
     private record Binding(NativeCoastalModel model, AtomicBoolean failed, Set<ResourceLocation> rocky,
                            Holder<Biome> stone, Holder<Biome> beach, Holder<Biome> snow,
                            LongAdder hookCalls, LongAdder fillCalls, LongAdder queries, LongAdder changed,
-                           Consumer<RuntimeException> fail) {}
+                           Consumer<RuntimeException> fail, AtomicBoolean active,
+                           BoundedLongCache<ColumnPolicy> columns) {}
     private static final Map<MultiNoiseBiomeSource, Map<Climate.Sampler, Binding>> SOURCES =
         Collections.synchronizedMap(new WeakHashMap<>());
     private static final LongAdder HOOK_CALLS = new LongAdder();
-    private static final ThreadLocal<Integer> DELEGATE_QUERY_DEPTH = ThreadLocal.withInitial(() -> 0);
+    // A small thread-owned guard with no source, sampler or world references.
+    private static final ThreadLocal<DelegateState> DELEGATE_QUERY_DEPTH = ThreadLocal.withInitial(DelegateState::new);
     private CoastalBiomeIntegration() {}
 
     public static Set<ResourceLocation> configuredRockyBiomes() {
@@ -45,7 +52,9 @@ public final class CoastalBiomeIntegration {
     }
     /** Positional delegate query: TerraBlender's coordinate HEAD hook must still run. */
     public static Holder<Biome> original(BiomeSource source, Climate.Sampler sampler, int x, int y, int z) {
-        return delegateQuery(() -> source.getNoiseBiome(QuartPos.fromBlock(x),QuartPos.fromBlock(y),QuartPos.fromBlock(z),sampler));
+        DelegateState state=DELEGATE_QUERY_DEPTH.get();state.depth++;
+        try { return source.getNoiseBiome(QuartPos.fromBlock(x),QuartPos.fromBlock(y),QuartPos.fromBlock(z),sampler); }
+        finally { state.depth--; }
     }
     /** Shared ownership boundary for biome coordination and material continuation. */
     public static boolean protectedBiome(Holder<Biome> biome) {
@@ -59,13 +68,9 @@ public final class CoastalBiomeIntegration {
             sampler.erosion(),net.minecraft.world.level.levelgen.DensityFunctions.zero(),sampler.weirdness(),sampler.spawnTarget());
     }
     private static <T> T delegateQuery(Supplier<T> query) {
-        int previous=DELEGATE_QUERY_DEPTH.get();
-        DELEGATE_QUERY_DEPTH.set(previous+1);
+        DelegateState state=DELEGATE_QUERY_DEPTH.get();state.depth++;
         try { return query.get(); }
-        finally {
-            if(previous==0)DELEGATE_QUERY_DEPTH.remove();
-            else DELEGATE_QUERY_DEPTH.set(previous);
-        }
+        finally { state.depth--; }
     }
     /** Null means let the original method and its other mixins execute normally. */
     public static Holder<Biome> intercept(MultiNoiseBiomeSource source, Climate.Sampler sampler,int qx,int qy,int qz) {
@@ -73,12 +78,13 @@ public final class CoastalBiomeIntegration {
     }
     static Holder<Biome> intercept(MultiNoiseBiomeSource source, Climate.Sampler sampler,int qx,int qy,int qz,
                                   Supplier<Holder<Biome>> positionalDelegate) {
+        if(DELEGATE_QUERY_DEPTH.get().depth>0)return null;
         Binding binding=binding(source,sampler);
-        if(binding==null || binding.failed.get() || QuartPos.toBlock(qy)<binding.model.seaLevel()-8
-            || DELEGATE_QUERY_DEPTH.get()>0)return null;
+        if(binding==null || binding.failed.get() || QuartPos.toBlock(qy)<binding.model.seaLevel()-8)return null;
         HOOK_CALLS.increment();
         binding.hookCalls.increment();
-        return adjust(source,sampler,qx,qy,qz,delegateQuery(positionalDelegate));
+        Holder<Biome> original=delegateQuery(positionalDelegate);
+        return adjust(current(source,sampler,binding),qx,qy,qz,original);
     }
     /**
      * Chunk biome fill uses a NoiseChunk-cached sampler rather than the world's canonical sampler.
@@ -91,8 +97,11 @@ public final class CoastalBiomeIntegration {
         if(binding==null || binding.failed.get())return delegate;
         binding.fillCalls.increment();
         return (qx,qy,qz,cached)->{
-            Holder<Biome> original=delegateQuery(()->delegate.getNoiseBiome(qx,qy,qz,cached));
-            return adjust(multi,canonical,qx,qy,qz,original);
+            Holder<Biome> original;
+            DelegateState state=DELEGATE_QUERY_DEPTH.get();state.depth++;
+            try { original=delegate.getNoiseBiome(qx,qy,qz,cached); }
+            finally { state.depth--; }
+            return adjust(current(multi,canonical,binding),qx,qy,qz,original);
         };
     }
     public static boolean bind(MultiNoiseBiomeSource source, Climate.Sampler sampler, NativeCoastalModel model,
@@ -104,28 +113,42 @@ public final class CoastalBiomeIntegration {
         Holder<Biome> beach = possible.stream().filter(b -> b.is(Biomes.BEACH)).findFirst().orElse(null);
         Holder<Biome> snow = possible.stream().filter(b -> b.is(Biomes.SNOWY_BEACH)).findFirst().orElse(null);
         var binding = new Binding(model, failed, rocky, stone, beach, snow,
-            new LongAdder(), new LongAdder(), new LongAdder(), new LongAdder(), fail);
+            new LongAdder(), new LongAdder(), new LongAdder(), new LongAdder(), fail,
+            new AtomicBoolean(true),new BoundedLongCache<>(2048,16));
         synchronized (SOURCES) {
-            SOURCES.computeIfAbsent(source, ignored -> new IdentityHashMap<>()).put(sampler, binding);
+            var samplers=SOURCES.computeIfAbsent(source, ignored -> new IdentityHashMap<>());
+            var previous=samplers.get(sampler);
+            if(previous!=null)previous.active.set(false);
+            samplers.put(sampler,binding);
         }
         return true;
     }
     public static Holder<Biome> adjust(MultiNoiseBiomeSource source, Climate.Sampler sampler,
                                        int qx, int qy, int qz, Holder<Biome> original) {
-        Binding binding = binding(source, sampler);
-        if (binding == null || binding.failed.get() || original == null) return original;
+        return adjust(binding(source,sampler),qx,qy,qz,original);
+    }
+    private static ColumnPolicy plan(Binding binding,int x,int z) {
+        var ground=binding.model.ground(x,z);
+        if(ground.mask()<.55)return ColumnPolicy.OUTSIDE;
+        var column=binding.model.detail(x,z);
+        var warm=new CoastalBiomePolicy.Context(column.original(),column.surface(),column.mask(),column.sand(),
+            column.pool()!=null,column.arch()!=null || column.overhang()!=null,false,false);
+        var cold=new CoastalBiomePolicy.Context(column.original(),column.surface(),column.mask(),column.sand(),
+            column.pool()!=null,column.arch()!=null || column.overhang()!=null,false,true);
+        return new ColumnPolicy(warm,cold);
+    }
+    private static Holder<Biome> adjust(Binding binding,int qx,int qy,int qz,Holder<Biome> original) {
+        if (binding == null || !binding.active.get() || binding.failed.get() || original == null) return original;
         binding.queries.increment();
         // Respect cave and river selections from both vanilla and tagged biome providers.
         if (protectedBiome(original)) return original;
         int x = QuartPos.toBlock(qx) + 2, y = QuartPos.toBlock(qy), z = QuartPos.toBlock(qz) + 2;
         if (y < binding.model.seaLevel() - 8) return original;
         try {
-            var ground = binding.model.ground(x, z);
-            if (ground.mask() < .55) return original;
-            var column = binding.model.detail(x, z);
-            var context = new CoastalBiomePolicy.Context(column.original(), column.surface(), column.mask(), column.sand(),
-                column.pool() != null, column.arch() != null || column.overhang() != null, false,
-                original.value().getBaseTemperature() <= .15F || original.is(Tags.Biomes.IS_SNOWY));
+            var policy=binding.columns.get(CoastalShape.key(qx,qz),key->plan(binding,x,z));
+            if(policy==ColumnPolicy.OUTSIDE)return original;
+            boolean cold=original.value().getBaseTemperature()<=.15F || original.is(Tags.Biomes.IS_SNOWY);
+            var context=cold?policy.cold:policy.warm;
             var choice = CoastalBiomePolicy.choose(context, y, binding.model.seaLevel());
             Holder<Biome> selected = switch (choice) {
                 case ORIGINAL -> original;
@@ -146,11 +169,16 @@ public final class CoastalBiomeIntegration {
             return samplers == null ? null : samplers.get(sampler);
         }
     }
+    /** A retained fill resolver follows replacement ownership and stops after unload. */
+    private static Binding current(MultiNoiseBiomeSource source,Climate.Sampler sampler,Binding expected) {
+        return expected.active.get()?expected:binding(source,sampler);
+    }
     public static void unbind(MultiNoiseBiomeSource source, Climate.Sampler sampler) {
         synchronized (SOURCES) {
             var samplers = SOURCES.get(source);
             if (samplers == null) return;
-            samplers.remove(sampler);
+            var removed=samplers.remove(sampler);
+            if(removed!=null)removed.active.set(false);
             if (samplers.isEmpty()) SOURCES.remove(source);
         }
     }
@@ -169,6 +197,9 @@ public final class CoastalBiomeIntegration {
             result.addProperty("biomeFillHookCalls", b.fillCalls.sum());
             result.addProperty("coastalBiomeQueries", b.queries.sum());
             result.addProperty("coastalBiomeSelectionsChanged", b.changed.sum());
+            result.addProperty("biomeColumnPolicyCacheHits",b.columns.hits());
+            result.addProperty("biomeColumnPolicyCacheMisses",b.columns.misses());
+            result.addProperty("biomeColumnPolicyCacheLocalHits",b.columns.localHits());
             result.addProperty("beachBiomeAvailable", b.beach != null);
             result.addProperty("snowyBeachBiomeAvailable", b.snow != null);
         }

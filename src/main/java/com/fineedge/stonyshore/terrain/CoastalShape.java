@@ -39,13 +39,13 @@ public final class CoastalShape {
     private final CoastalBeachProfile beaches;
     private final CoastalPools pools;
     private final CoastalCaves caves;
-    private final BoundedCache<Long,Boolean> caveFits=new BoundedCache<>(256);
+    private final BoundedLongCache<Boolean> caveFits=new BoundedLongCache<>(256);
     private final int sea;
     private final Options options;
-    private final BoundedCache<Long,Region> rawRegions=new BoundedCache<>(256);
-    private final BoundedCache<Long,Region> regions=new BoundedCache<>(256);
-    private final BoundedCache<Long,Column> columns=new BoundedCache<>(8192);
-    private final BoundedCache<Long,Boolean> apronSupport=new BoundedCache<>(8192);
+    private final BoundedLongCache<Region> rawRegions=new BoundedLongCache<>(256);
+    private final BoundedLongCache<Region> regions=new BoundedLongCache<>(256);
+    private final BoundedLongCache<Column> columns=new BoundedLongCache<>(8192,8);
+    private final BoundedLongCache<Boolean> apronSupport=new BoundedLongCache<>(8192);
     private final ConcurrentHashMap<String,LongAdder> counters=new ConcurrentHashMap<>();
     public CoastalShape(long seed,int sea,GroundSampler ground,Options options) {
         this(seed,sea,ground,options,(x,z)->ground.sample(x,z).height());
@@ -71,7 +71,7 @@ public final class CoastalShape {
         caves.stats().forEach((k,v)->result.merge(k,v,Long::sum));
         result.put("regionCacheHits",regions.hits());result.put("regionCacheMisses",regions.misses());
         result.put("columnCacheHits",columns.hits());result.put("columnCacheMisses",columns.misses());
-        result.put("columnCacheRecentHits",columns.recentHits());return result;
+        result.put("columnCacheRecentHits",columns.recentHits());result.put("columnCacheLocalHits",columns.localHits());return result;
     }
     public Column column(int x,int z) { return columns.get(key(x,z),k->planColumn(x,z)); }
     public CoastalCaves.Cave cave(int x,int z) {

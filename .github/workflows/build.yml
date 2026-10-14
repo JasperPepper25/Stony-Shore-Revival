@@ -31,7 +31,7 @@ jobs:
         run: |
           java -version
           gradle --version
-          gradle clean build --stacktrace
+          gradle clean build cacheValidationDependency --stacktrace
       - name: Upload installable Forge JAR
         uses: actions/upload-artifact@v4
         with:
@@ -45,3 +45,9 @@ jobs:
           name: stony-shore-test-results
           path: build/test-results/test/*.xml
           if-no-files-found: warn
+      - name: Upload cache validation dependency
+        uses: actions/upload-artifact@v4
+        with:
+          name: cache-validation-dependency
+          path: build/cache-validation-dependency/*.jar
+          if-no-files-found: error

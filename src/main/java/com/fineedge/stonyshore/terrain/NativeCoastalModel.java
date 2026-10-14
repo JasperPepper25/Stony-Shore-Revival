@@ -12,9 +12,9 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
     private final RegionalCoast coast;
     private final int sea,maxY,inlandReach;
     private final CoastalShape shape;
-    private final BoundedCache<Long,Double> heights=new BoundedCache<>(16384);
-    private final BoundedCache<Long,Integer> biomes=new BoundedCache<>(16384);
-    private final BoundedCache<Long,CoastalShape.Ground> grounds=new BoundedCache<>(8192);
+    private final BoundedLongCache<Double> heights=new BoundedLongCache<>(16384);
+    private final BoundedLongCache<Integer> biomes=new BoundedLongCache<>(16384);
+    private final BoundedLongCache<CoastalShape.Ground> grounds=new BoundedLongCache<>(8192,8);
     // One immutable 4x4 lattice per worker, not a second growing height/column map.
     // Static records hold no model/world references after a worker changes worlds.
     private record HeightCell(int x,int z,double[] nodes) {}
@@ -165,7 +165,7 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
         s.put("heightCacheHits",heights.hits());s.put("heightCacheMisses",heights.misses());
         s.put("heightCellReuseHits",heightCellReuse.sum());s.put("heightCacheRecentHits",heights.recentHits());
         s.put("groundCacheHits",grounds.hits());s.put("groundCacheMisses",grounds.misses());
-        s.put("groundCacheRecentHits",grounds.recentHits());
+        s.put("groundCacheRecentHits",grounds.recentHits());s.put("groundCacheLocalHits",grounds.localHits());
         s.put("biomeClassificationCacheHits",biomes.hits());s.put("biomeClassificationCacheMisses",biomes.misses());
         s.putAll(coast.stats());
         s.put("groundPlanningNanos",planningNanos.sum());return s;

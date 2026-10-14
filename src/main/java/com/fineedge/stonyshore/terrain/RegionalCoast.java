@@ -20,9 +20,9 @@ public final class RegionalCoast {
     private final CoastalProfile.Heights heights;
     private final CoastalColumnSampler.Shore shore,ocean;
     private final int sea,inlandReach;
-    private final BoundedCache<Long,Point> points=new BoundedCache<>(32768);
-    private final BoundedCache<Long,Tile> tiles=new BoundedCache<>(128);
-    private final BoundedCache<Long,Sample> samples=new BoundedCache<>(16384);
+    private final BoundedLongCache<Point> points=new BoundedLongCache<>(32768);
+    private final BoundedLongCache<Tile> tiles=new BoundedLongCache<>(128);
+    private final BoundedLongCache<Sample> samples=new BoundedLongCache<>(16384);
 
     public RegionalCoast(int sea,int inlandReach,CoastalProfile.Heights heights,
                          CoastalColumnSampler.Shore shore,CoastalColumnSampler.Shore ocean) {

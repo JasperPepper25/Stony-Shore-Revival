@@ -41,7 +41,7 @@ public final class CoastalCaves {
     private final Allowed allowed;
     private final CoastalPools.Height surface;
     private final int sea;
-    private final BoundedCache<Long,Site> raw=new BoundedCache<>(256),sites=new BoundedCache<>(256),columns=new BoundedCache<>(8192);
+    private final BoundedLongCache<Site> raw=new BoundedLongCache<>(256),sites=new BoundedLongCache<>(256),columns=new BoundedLongCache<>(8192,8);
     private final ConcurrentHashMap<String,LongAdder> counters=new ConcurrentHashMap<>();
     public CoastalCaves(CoastalTerrainPlanner noise,int sea,CoastalShape.GroundSampler ground,
                         CoastalPools.Height surface,CoastalShape.Solid support) {
@@ -53,7 +53,9 @@ public final class CoastalCaves {
     }
     private void count(String key) { counters.computeIfAbsent(key,k->new LongAdder()).increment(); }
     public Map<String,Long> stats() {
-        var result=new TreeMap<String,Long>();counters.forEach((k,v)->result.put(k,v.sum()));return result;
+        var result=new TreeMap<String,Long>();counters.forEach((k,v)->result.put(k,v.sum()));
+        result.put("caveColumnCacheHits",columns.hits());result.put("caveColumnCacheMisses",columns.misses());
+        result.put("caveColumnCacheLocalHits",columns.localHits());return result;
     }
     private Site raw(int cx,int cz) { return raw.get(CoastalShape.key(cx,cz),k->plan(cx,cz)); }
     private Site site(int cx,int cz) { return sites.get(CoastalShape.key(cx,cz),k->{
