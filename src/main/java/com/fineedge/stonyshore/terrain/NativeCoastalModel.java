@@ -14,7 +14,7 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
     private final CoastalShape shape;
     private final BoundedLongCache<Double> heights=new BoundedLongCache<>(16384);
     private final BoundedLongCache<Integer> biomes=new BoundedLongCache<>(16384);
-    private final BoundedLongCache<CoastalShape.Ground> grounds=new BoundedLongCache<>(8192,8);
+    private final BoundedReadCache<CoastalShape.Ground> grounds=new BoundedReadCache<>(8192,8,this::planGround);
     // One immutable 4x4 lattice per worker, not a second growing height/column map.
     // Static records hold no model/world references after a worker changes worlds.
     private record HeightCell(int x,int z,double[] nodes) {}
@@ -117,14 +117,17 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
         return new GroundContext(c.eligibility()*land*water,c.distance(),c.relief());
     }
     public CoastalShape.Ground ground(int x,int z) {
-        return grounds.get(CoastalShape.key(x,z),k->{
-            long started=System.nanoTime();
-            try {
-                double height=originalHeight(x,z);GroundContext c=context(x,z);
-                return new CoastalShape.Ground(height,c.mask,c.distance,
-                    Math.max(0,inlandReach-Math.max(0,c.distance)),c.relief,c.distance<0);
-            } finally {planningNanos.add(System.nanoTime()-started);}
-        });
+        return grounds.get(CoastalShape.key(x,z));
+    }
+    private CoastalShape.Ground planGround(long key) {
+        // Decode the original full signed coordinates only on a cache miss.
+        int x=(int)(key>>32),z=(int)key;
+        long started=System.nanoTime();
+        try {
+            double height=originalHeight(x,z);GroundContext c=context(x,z);
+            return new CoastalShape.Ground(height,c.mask,c.distance,
+                Math.max(0,inlandReach-Math.max(0,c.distance)),c.relief,c.distance<0);
+        } finally {planningNanos.add(System.nanoTime()-started);}
     }
     public CoastalShape.Column detail(int x,int z) { return shape.column(x,z); }
     public CoastalProfile.Sample profile(int x,int z) { return shape.profile(x,z); }
@@ -166,6 +169,9 @@ public final class NativeCoastalModel extends CoastalColumnSampler {
         s.put("heightCellReuseHits",heightCellReuse.sum());s.put("heightCacheRecentHits",heights.recentHits());
         s.put("groundCacheHits",grounds.hits());s.put("groundCacheMisses",grounds.misses());
         s.put("groundCacheRecentHits",grounds.recentHits());s.put("groundCacheLocalHits",grounds.localHits());
+        s.put("groundCacheSharedReadHits",grounds.sharedReadHits());
+        s.put("groundCacheEntries",(long)grounds.size());s.put("groundCacheCapacity",(long)grounds.capacity());
+        s.put("groundCacheBuckets",(long)grounds.bucketCount());
         s.put("biomeClassificationCacheHits",biomes.hits());s.put("biomeClassificationCacheMisses",biomes.misses());
         s.putAll(coast.stats());
         s.put("groundPlanningNanos",planningNanos.sum());return s;
