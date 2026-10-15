@@ -30,13 +30,19 @@ public final class CoastalLandforms {
         }
         double footprintRadius() { return Math.max(rx,rz)*1.2+2; }
     }
-    public record Arch(int x,int z,double angle,double width,double length,double height,double lean,int sea,CoastalProjection.Fin fin) {
+    public record Arch(int x,int z,double angle,double width,double length,double height,double lean,int sea,
+                       CoastalProjection.Fin fin,SeaArchCatalog.Opening portal) {
+        public Arch(int x,int z,double angle,double width,double length,double height,double lean,int sea,CoastalProjection.Fin fin) {
+            this(x,z,angle,width,length,height,lean,sea,fin,null);
+        }
         public Arch(int x,int z,double angle,double width,double length,double height,double lean,int sea) {
             this(x,z,angle,width,length,height,lean,sea,null);
         }
         private double u(int px,int pz) { return (px-x)*Math.cos(angle)+(pz-z)*Math.sin(angle); }
         private double v(int px,int pz) { return -(px-x)*Math.sin(angle)+(pz-z)*Math.cos(angle); }
+        public double openingCenterY() { return sea+(portal==null?height*.43:Math.max(6,height*.43)); }
         public double opening(int px,int y,int pz) {
+            if(portal!=null)return portal.distance(this,u(px,pz),v(px,pz),y);
             double yy=(y-(sea+height*0.43))/(height*0.57);
             double uu=(u(px,pz)-lean*(yy+0.4))/width;
             if(fin!=null && (fin.taper()!=0 || fin.bend()!=0 || fin.roughness()!=0)) {

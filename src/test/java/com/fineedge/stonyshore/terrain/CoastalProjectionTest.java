@@ -27,7 +27,7 @@ class CoastalProjectionTest {
                 var fin=a.fin();assertNotNull(fin);
                 assertTrue(Math.cos(fin.direction())<-.95);
                 assertTrue(a.x()<fin.rootX());
-                int y=(int)(63+a.height()*.43);
+                int y=(int)a.openingCenterY();
                 for(int v=-(int)Math.ceil(a.length())-3;v<=(int)Math.ceil(a.length())+3;v++) {
                     int x=(int)Math.round(a.x()-v*Math.sin(a.angle()));
                     int z=(int)Math.round(a.z()+v*Math.cos(a.angle()));

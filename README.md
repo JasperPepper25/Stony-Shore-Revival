@@ -1,3 +1,18 @@
+# Stony Shore Revival — sea arch catalog candidate
+
+**0.8.0-terrain.13-arches.1** develops twelve equally weighted arch styles from
+our accepted perf.2 baseline: rising and swept fins, rounded bridges, tall
+pointed forms, low and upright keyholes, attached stack piers and detached
+stack companions. Each family also varies its dimensions, bend and weathering.
+
+See the [catalog, scope and testing guide](docs/terrain13-arches.md).
+This branch is an arch-development candidate; `main` and `terrain-rewrite`
+remain on the accepted perf.2 baseline while it is tested.
+
+---
+
+## Accepted performance baseline
+
 # Stony Shore Revival — perf.2 development baseline
 
 **The accepted development baseline is `0.8.0-terrain.12-perf.2`.**
