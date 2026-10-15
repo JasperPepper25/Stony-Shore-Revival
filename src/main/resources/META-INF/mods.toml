@@ -6,7 +6,7 @@ license="MIT"
 modId="stonyshorerevival"
 version="${mod_version}"
 displayName="Stony Shore Revival"
-description='''A configurable, additive stony shore world-generation feature for Forge 1.20.1.'''
+description='''Coastal terrain, tide pools, beaches and vegetation for Forge 1.20.1. Native terrain composition is currently supported for the audited Tectonic/Terralith/Lithostitched versions.'''
 
 [[dependencies.stonyshorerevival]]
 modId="forge"

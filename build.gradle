@@ -29,6 +29,9 @@ repositories {
     mavenCentral()
 }
 dependencies {
+    testImplementation platform("org.junit:junit-bom:5.11.4")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher"
     implementation minecraft.dependency("net.minecraftforge:forge:${minecraft_version}-${forge_version}")
 }
 
@@ -47,3 +50,15 @@ tasks.named('processResources', ProcessResources) {
 }
 
 tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+tasks.named("test") { useJUnitPlatform() }
+
+// Preserve the game's existing primitive-map dependency for independent cache
+// validation when the analysis host cannot run the complete Forge Gradle build.
+tasks.register('cacheValidationDependency', Copy) {
+    from { configurations.testRuntimeClasspath.findAll { it.name.startsWith('fastutil-') && it.name.endsWith('.jar') } }
+    into layout.buildDirectory.dir('cache-validation-dependency')
+}
+
+// Coordinate biome hooks explicitly include official and SRG selectors for 1.20.1.
+tasks.named("jar", Jar) { manifest.attributes("MixinConfigs": "stonyshorerevival.mixins.json") }
