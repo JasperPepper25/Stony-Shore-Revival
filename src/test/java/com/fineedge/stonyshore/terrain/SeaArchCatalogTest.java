@@ -65,7 +65,7 @@ class SeaArchCatalogTest {
             var a=plan(style,seed,0);assertNotNull(a);var f=a.fin();
             int y=(int)Math.round(a.openingCenterY());
             for(int z=-(int)Math.floor(a.length());z<=(int)Math.floor(a.length());z++)
-                assertTrue(a.opening(a.x(),y,z)<0,style+" open through both faces");
+                assertTrue(a.opening(a.x(),y,a.z()+z)<0,style+" open through both faces");
             for(int u=-2;u<=2;u++)for(int v=-2;v<=2;v++) {
                 int x=a.x()+u,z=a.z()+v,roof=(int)Math.floor(f.top(x,z))-2;
                 assertTrue(a.opening(x,roof,z)>0,style+" keeps its roof above the aperture");
