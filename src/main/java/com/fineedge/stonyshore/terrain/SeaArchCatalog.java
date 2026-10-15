@@ -35,11 +35,11 @@ public final class SeaArchCatalog {
         double r=noise.value(cx,cz,19301+salt),q=noise.value(cx,cz,19302+salt);
         double reach,thickness,height,width;
         switch(style) {
-            case RISING_FIN -> {reach=52+14*r;thickness=6+2*q;height=16+5*q;width=12+3*r;}
-            case SWEPT_FIN -> {reach=50+14*r;thickness=5.5+2*q;height=18+7*q;width=11+3*r;}
+            case RISING_FIN -> {reach=52+14*r;thickness=6+2*q;height=22+7*q;width=13+3*r;}
+            case SWEPT_FIN -> {reach=50+14*r;thickness=5.5+2*q;height=24+8*q;width=11+3*r;}
             case LOW_WINDOW_FIN -> {reach=52+14*r;thickness=6+2*q;height=8+3*q;width=13+3*r;}
-            case ROUNDED_BRIDGE -> {reach=38+16*r;thickness=7+3*q;height=17+8*q;width=10+3*r;}
-            case BROAD_SPAN -> {reach=48+14*r;thickness=6+3*q;height=15+6*q;width=14+3*r;}
+            case ROUNDED_BRIDGE -> {reach=38+16*r;thickness=7+3*q;height=26+10*q;width=11+3*r;}
+            case BROAD_SPAN -> {reach=48+14*r;thickness=6+3*q;height=22+8*q;width=14+3*r;}
             case TALL_SPIRE -> {reach=34+8*r;thickness=5+2*q;height=34+9*q;width=4.5+1.3*r;}
             case POINTED_CROWN -> {reach=36+10*r;thickness=5.5+2*q;height=29+9*q;width=6+2*r;}
             case LOW_SLOT -> {reach=46+12*r;thickness=8+2*q;height=6+3*q;width=13+3*r;}
@@ -137,9 +137,11 @@ public final class SeaArchCatalog {
         }
         private double crown(CoastalProjection.Fin f,double s,double t) {
             double n=clamp(s/f.reach());
+            double peak=.47+.13*Math.sin(phase*.63);
+            double flank=n<peak?n/peak:(1-n)/(1-peak);
             double profile=style.rising()?rise*CoastalShape.smooth(n/.87):
                 style==Style.TALL_SPIRE?rise*Math.pow(Math.max(0,Math.sin(n*Math.PI)),.65):
-                style==Style.POINTED_CROWN?rise*Math.pow(Math.max(0,1-Math.abs(n-.51)/.51),1.35):
+                style==Style.POINTED_CROWN?rise*Math.pow(Math.max(0,flank),n<peak?1.05:1.7):
                 rise*Math.sin(n*Math.PI)-5*CoastalShape.smooth(n);
             double ridge=(style==Style.TALL_SPIRE || style==Style.POINTED_CROWN)?Math.abs(t)*.65:.045*t*t;
             // Two coherent scales, independent phase on each face; no voxel-wise random cavities.
@@ -199,7 +201,7 @@ public final class SeaArchCatalog {
     /** Horizontal work is cached with the shore column; density sampling allocates nothing. */
     public static final class Section {
         private final CoastalProjection.Fin fin;
-        private final double t,width,capU,cap,roof,bottom,wear,edge;
+        private final double t,width,capU,cap,roof,bottom,wear,edge,layers;
         private final StackColumn first,second;
         private final CoastalLandforms.Arch arch;
         private final double portalU,portalV,portalCos,portalSin;
@@ -224,6 +226,7 @@ public final class SeaArchCatalog {
             roof=capU==0?crown:(crown+f.floor())*.5+(crown-f.floor())*.5*closure;
             bottom=capU==0?f.floor():(crown+f.floor())*.5-(crown-f.floor())*.5*closure;
             wear=f.roughness()*(.58*Math.sin(s*.17+t*.24+b.phase)+.32*Math.sin(s*.33-t*.19-b.phase));
+            layers=s*.11+t*.17+b.phase;
             first=b.stacks.isEmpty()?null:new StackColumn(b.stacks.get(0),x,z);
             second=b.stacks.size()<2?null:new StackColumn(b.stacks.get(1),x,z);
         }
@@ -235,7 +238,8 @@ public final class SeaArchCatalog {
         }
         public double solid(int y) {
             double fraction=clamp((y-fin.floor())/Math.max(1,roof-fin.floor()));
-            double w=Math.max(1,width*(1.18-.30*CoastalShape.smooth(fraction))+wear);
+            double w=Math.max(1,width*(1.18-.30*CoastalShape.smooth(fraction))+wear
+                +fin.roughness()*.45*Math.sin(y*.21+layers));
             double side=(1-Math.hypot(capU,t/w))*Math.min(w,cap);
             double result=Math.min(Math.min(edge,side),Math.min(roof+.5-y,y-bottom+.5));
             if(first!=null)result=Math.max(result,first.solid(y));
