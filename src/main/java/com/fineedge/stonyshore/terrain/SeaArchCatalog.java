@@ -57,7 +57,6 @@ public final class SeaArchCatalog {
         // Keep both piers substantial, including the broadest low portals.
         width=Math.min(width,Math.min(position-7,reach-position-10));
         double cs=Math.cos(direction),sn=Math.sin(direction);
-        int ax=(int)Math.round(x+cs*position),az=(int)Math.round(z+sn*position);
         CoastalShape.Ground toe=ground.sample((int)Math.round(x+cs*(reach-7)),(int)Math.round(z+sn*(reach-7)));
         double floor=Math.min(sea-10,toe.height()-4);
         List<Stack> stacks=List.of();
@@ -71,6 +70,9 @@ public final class SeaArchCatalog {
         var body=new Body(style,rise,phase,stacks);
         var fin=new CoastalProjection.Fin(x,z,direction,reach,thickness,rootTop,floor,
             style.rising()?.75:.18,bend,1.1+.5*r,phase,body);
+        // The portal follows the bent spine instead of testing a roof beside the actual fin.
+        double spine=body.center(fin,position);
+        int ax=(int)Math.round(x+cs*position-sn*spine),az=(int)Math.round(z+sn*position+cs*spine);
         // Fit the complete opening under its roof, rather than clipping the chosen style to another family.
         double roof=Double.POSITIVE_INFINITY;
         for(double u:new double[]{-.85,0,.85})for(double v:new double[]{-.45,0,.45}) {
