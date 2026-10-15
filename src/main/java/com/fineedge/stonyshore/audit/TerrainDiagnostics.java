@@ -124,17 +124,33 @@ final class TerrainDiagnostics {
         j.addProperty("height",a.height());j.addProperty("width",a.width());j.addProperty("length",a.length());
         if(a.fin()!=null) {
             j.addProperty("construction","attached_seaward_fin_with_crosswise_opening");
+            if(a.fin().catalog()!=null) {
+                var body=a.fin().catalog();
+                j.addProperty("catalogStyle",body.style().name());j.addProperty("catalogLabel",body.style().label());
+                j.addProperty("catalogStyleWeight",body.style().weight());
+                j.addProperty("openingCenterY",a.openingCenterY());
+                j.addProperty("openingTiltRadians",a.portal().tilt());
+                JsonArray stacks=new JsonArray();
+                for(var stack:body.stacks()) {
+                    JsonObject entry=new JsonObject();entry.addProperty("x",stack.x());entry.addProperty("z",stack.z());
+                    entry.addProperty("floorY",stack.floor());entry.addProperty("topY",stack.top());
+                    entry.addProperty("radiusAlong",stack.rx());entry.addProperty("radiusAcross",stack.rz());
+                    entry.add("base",block(source,stack.x(),(int)Math.floor(stack.floor()),stack.z()));
+                    stacks.add(entry);
+                }
+                j.add("seaStacks",stacks);
+            }
             j.addProperty("rootX",a.fin().rootX());j.addProperty("rootZ",a.fin().rootZ());
             j.addProperty("seawardDirectionRadians",a.fin().direction());j.addProperty("seawardReach",a.fin().reach());
             j.add("attachment",block(source,a.fin().rootX(),(int)Math.floor(a.fin().crest()-12),a.fin().rootZ()));
         }
-        j.add("openingCenter",block(source,a.x(),(int)(a.sea()+a.height()*0.43),a.z()));
+        j.add("openingCenter",block(source,a.x(),(int)a.openingCenterY(),a.z()));
         int roof=a.fin()==null?(int)Math.ceil(a.sea()+a.height()+3):(int)Math.floor(a.fin().top(a.x(),a.z()))-1;
         j.add("roof",block(source,a.x(),roof,a.z()));
         for(int sign:new int[]{-1,1})j.add(sign<0?"portalA":"portalB",block(source,
-            (int)Math.round(a.x()-sign*Math.sin(a.angle())*(a.length()+2)),(int)(a.sea()+a.height()*0.43),
+            (int)Math.round(a.x()-sign*Math.sin(a.angle())*(a.length()+2)),(int)a.openingCenterY(),
             (int)Math.round(a.z()+sign*Math.cos(a.angle())*(a.length()+2))));
-        j.add("openingTransect",transect(source,a.x(),a.z(),a.angle(),(int)(a.sea()+a.height()*.43),-a.length()-3,a.length()+3));return j;
+        j.add("openingTransect",transect(source,a.x(),a.z(),a.angle(),(int)a.openingCenterY(),-a.length()-3,a.length()+3));return j;
     }
     private static JsonObject overhangCheck(CommandSourceStack source,CoastalLandforms.Overhang a) {
         JsonObject j=new JsonObject();j.addProperty("type","overhang");j.addProperty("centerX",a.x());j.addProperty("centerZ",a.z());

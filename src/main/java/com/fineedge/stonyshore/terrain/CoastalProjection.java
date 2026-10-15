@@ -4,7 +4,11 @@ package com.fineedge.stonyshore.terrain;
 public final class CoastalProjection {
     private CoastalProjection() {}
     public record Fin(int rootX,int rootZ,double direction,double reach,double thickness,double crest,double floor,
-                      double taper,double bend,double roughness,double phase) {
+                      double taper,double bend,double roughness,double phase,SeaArchCatalog.Body catalog) {
+        public Fin(int rootX,int rootZ,double direction,double reach,double thickness,double crest,double floor,
+                   double taper,double bend,double roughness,double phase) {
+            this(rootX,rootZ,direction,reach,thickness,crest,floor,taper,bend,roughness,phase,null);
+        }
         public Fin(int rootX,int rootZ,double direction,double reach,double thickness,double crest,double floor) {
             this(rootX,rootZ,direction,reach,thickness,crest,floor,0,0,0,0);
         }
@@ -45,6 +49,7 @@ public final class CoastalProjection {
             return 1+CoastalShape.smooth(u*2)*(rounded-1);
         }
         public double top(int x,int z) {
+            if(catalog!=null)return catalog.top(this,x,z);
             double s=along(x,z),t=across(x,z)-center(s);
             double crown=crown(s,t);
             if(s<=reach-capLength())return crown;
@@ -52,12 +57,14 @@ public final class CoastalProjection {
             return (crown+floor)/2+(crown-floor)*.5*capSection(s,t);
         }
         public double bottom(int x,int z) {
+            if(catalog!=null)return catalog.bottom(this,x,z);
             double s=along(x,z),t=across(x,z)-center(s);
             if(s<=reach-capLength())return floor;
             double crown=crown(s,t);
             return (crown+floor)/2-(crown-floor)*.5*capSection(s,t);
         }
         public double edge(int x,int z) {
+            if(catalog!=null)return catalog.edge(this,x,z);
             double s=along(x,z),t=across(x,z)-center(s),width=halfWidth(s);
             if(natural())width=width*1.2+roughness;
             double u=Math.max(0,(s-(reach-capLength()))/capLength());
@@ -66,6 +73,7 @@ public final class CoastalProjection {
         }
         public double reserve(int x,int z) { return CoastalShape.smooth((edge(x,z)+2)/4); }
         public double solid(int x,int y,int z) {
+            if(catalog!=null)return catalog.solid(this,x,y,z);
             if(natural()) {
                 double s=along(x,z),t=across(x,z)-center(s);
                 double crown=crown(s,t),fraction=Math.max(0,Math.min(1,(y-floor)/Math.max(1,crown-floor)));
@@ -84,9 +92,10 @@ public final class CoastalProjection {
             }
             return Math.min(edge(x,z),Math.min(top(x,z)+.5-y,y-bottom(x,z)+.5));
         }
-        public double centerX() { return rootX+Math.cos(direction)*(reach-10)/2; }
-        public double centerZ() { return rootZ+Math.sin(direction)*(reach-10)/2; }
-        public double radius() { return Math.hypot((reach+14)/2,natural()?thickness*2+Math.abs(bend)*1.2+roughness+3:thickness*1.6+2); }
+        public double centerX() { return rootX+Math.cos(direction)*(catalog==null?(reach-10)/2:30); }
+        public double centerZ() { return rootZ+Math.sin(direction)*(catalog==null?(reach-10)/2:30); }
+        // A common envelope prevents long fins and stack styles receiving a larger collision penalty.
+        public double radius() { return catalog==null?Math.hypot((reach+14)/2,natural()?thickness*2+Math.abs(bend)*1.2+roughness+3:thickness*1.6+2):58; }
     }
     public record Ledge(int rootX,int rootZ,double direction,double reach,double width,double crest,
                         double rootDepth,double tipThickness,double roughness,double phase) {

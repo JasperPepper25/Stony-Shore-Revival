@@ -127,7 +127,7 @@ class CoastalNaturalProjectionTest {
                 accepted++;var fin=arch.fin();rounded|=fin.taper()<.5;rockFin|=fin.taper()>.5;
                 shortest=Math.min(shortest,fin.reach());longest=Math.max(longest,fin.reach());
                 lowest=Math.min(lowest,arch.height());tallest=Math.max(tallest,arch.height());
-                assertTrue(fin.reach()>=34 && arch.height()>=14,"large baseline arches survive support validation");
+                assertTrue(fin.reach()>=34 && arch.height()>=5,"catalog arches, including low slots, survive support validation");
                 assertTrue(fin.top(arch.x(),arch.z())-(63+arch.height())>6,"passage retains substantial crown rock");
                 for(double along:new double[]{-arch.width()*.3,0,arch.width()*.3})
                     for(double across:new double[]{-fin.thickness()*.25,0,fin.thickness()*.25}) {
